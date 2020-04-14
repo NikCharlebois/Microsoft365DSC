@@ -41,6 +41,14 @@ function Start-M365DSCConfigurationExtract
         $Workloads,
 
         [Parameter()]
+        [System.Uint32]
+        $Start,
+
+        [Parameter()]
+        [System.Uint32]
+        $End,
+
+        [Parameter()]
         [ValidateSet('Lite', 'Default', 'Full')]
         [System.String]
         $Mode
@@ -195,7 +203,7 @@ function Start-M365DSCConfigurationExtract
                     }
                     else
                     {
-                        $exportString = Export-TargetResource -GlobalAdminAccount $GlobalAdminAccount
+                        $exportString = Export-TargetResource -GlobalAdminAccount $GlobalAdminAccount -Start $Start -End $End
                     }
                 }
                 $DSCContent += $exportString

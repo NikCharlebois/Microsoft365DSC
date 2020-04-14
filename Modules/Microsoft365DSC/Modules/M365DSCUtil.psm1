@@ -905,6 +905,14 @@ function Export-M365DSCConfiguration
         $MaxProcesses,
 
         [Parameter()]
+        [System.Uint32]
+        $Start,
+
+        [Parameter()]
+        [System.Uint32]
+        $End,
+
+        [Parameter()]
         [System.Management.Automation.PSCredential]
         $GlobalAdminAccount
     )
@@ -950,7 +958,7 @@ function Export-M365DSCConfiguration
                 -Path $Path -FileName $FileName `
                 -MaxProcesses $MaxProcesses `
                 -ConfigurationName $ConfigurationName `
-                -Quiet
+                -Quiet -Start $Start -End $End
         }
         elseif ($null -ne $Mode)
         {

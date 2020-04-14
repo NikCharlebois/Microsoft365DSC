@@ -23,7 +23,7 @@ function Get-TargetResource
         $MailNickName,
 
         [Parameter()]
-        [System.String[]]
+        [System.String]
         $Owner,
 
         [Parameter()]
@@ -95,6 +95,18 @@ function Get-TargetResource
         [Parameter()]
         [System.Boolean]
         $AllowGuestDeleteChannels,
+
+        [Parameter()]
+        [System.Boolean]
+        $Archived,
+
+        [Parameter()]
+        [System.Boolean]
+        $ShowInTeamsSearchAndSuggestions,
+
+        [Parameter()]
+        [System.String]
+        $Classification,
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
@@ -139,6 +151,9 @@ function Get-TargetResource
         AllowChannelMentions              = $AllowChannelMentions
         AllowGuestCreateUpdateChannels    = $AllowGuestCreateUpdateChannels
         AllowGuestDeleteChannels          = $AllowGuestDeleteChannels
+        ShowInTeamsSearchAndSuggestions   = $ShowInTeamsSearchAndSuggestions
+        Classification                    = $Classification
+        Archived                          = $Archived
         GlobalAdminAccount                = $GlobalAdminAccount
     }
 
@@ -176,12 +191,13 @@ function Get-TargetResource
         }
 
         $Owners = Get-TeamUser -GroupId $team.GroupId | Where-Object { $_.Role -eq "owner" }
-        $OwnersArray = @()
+
         if ($null -ne $Owners)
         {
             foreach ($owner in $Owners.User)
             {
-                $OwnersArray += $owner[0].ToString()
+                $OwnersArray = $owner[0].ToString()
+                break
             }
         }
         Write-Verbose -Message "Found Team $($team.DisplayName)."
@@ -209,6 +225,9 @@ function Get-TargetResource
             AllowGuestDeleteChannels          = $team.AllowGuestDeleteChannels
             AllowCreateUpdateChannels         = $team.AllowCreateUpdateChannels
             AllowDeleteChannels               = $team.AllowDeleteChannels
+            Archived                          = $team.Archived
+            ShowInTeamsSearchAndSuggestions   = $team.ShowInTeamsSearchAndSuggestions
+            Classification                    = $team.Classification
             Ensure                            = "Present"
             GlobalAdminAccount                = $GlobalAdminAccount
         }
@@ -244,7 +263,7 @@ function Set-TargetResource
         $MailNickName,
 
         [Parameter()]
-        [System.String[]]
+        [System.String]
         $Owner,
 
         [Parameter()]
@@ -316,6 +335,18 @@ function Set-TargetResource
         [Parameter()]
         [System.Boolean]
         $AllowGuestDeleteChannels,
+
+        [Parameter()]
+        [System.Boolean]
+        $Archived,
+
+        [Parameter()]
+        [System.Boolean]
+        $ShowInTeamsSearchAndSuggestions,
+
+        [Parameter()]
+        [System.String]
+        $Classification,
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
@@ -345,38 +376,33 @@ function Set-TargetResource
     $CurrentParameters.Remove("GlobalAdminAccount")
     $CurrentParameters.Remove("Ensure")
 
-    if ($Ensure -eq "Present" -and ($team.Ensure -eq "Present"))
+    $needToUpdate = $false
+    if ($Ensure -eq "Present" -and ($team.Ensure -eq "Absent"))
+    {
+        Write-Verbose -Message "Creating team $DisplayName"
+        Write-Verbose -Message "Creation Params: $(Convert-M365DscHashtableToString -Hashtable $CurrentParameters)"
+        New-Team -GroupId $CurrentParameters.GroupId
+        $needToUpdate = $true
+    }
+    elseif ($Ensure -eq "Absent" -and ($team.Ensure -eq "Present"))
+    {
+        Write-Verbose -Message "Removing team $DisplayName"
+        Remove-team -GroupId $team.GroupId
+    }
+
+    if ($Ensure -eq "Present" -and $needToUpdate)
     {
         ## Can't pass Owner parm into set opertaion
         if ($CurrentParameters.ContainsKey("Owner"))
         {
             $CurrentParameters.Remove("Owner")
         }
-        if (-not $CurrentParameters.ContainsKey("GroupID"))
+        if ($CurrentParameters.ContainsKey("Archived"))
         {
-            $CurrentParameters.Add("GroupID", $team.GroupID)
+            $CurrentParameters.Remove("Archived")
         }
         Set-Team @CurrentParameters
         Write-Verbose -Message "Updating team $DisplayName"
-    }
-    elseif ($Ensure -eq "Present" -and ($team.Ensure -eq "Absent"))
-    {
-        ## GroupID not used on New-Team cmdlet
-        if ($CurrentParameters.ContainsKey("GroupID"))
-        {
-            $CurrentParameters.Remove("GroupID")
-        }
-        Write-Verbose -Message "Creating team $DisplayName"
-        if ($null -ne $Owner)
-        {
-            $CurrentParameters.Owner = $Owner[0]
-        }
-        New-Team @CurrentParameters
-    }
-    elseif ($Ensure -eq "Absent" -and ($team.Ensure -eq "Present"))
-    {
-        Write-Verbose -Message "Removing team $DisplayName"
-        Remove-team -GroupId $team.GroupId
     }
 }
 
@@ -405,7 +431,7 @@ function Test-TargetResource
         $MailNickName,
 
         [Parameter()]
-        [System.String[]]
+        [System.String]
         $Owner,
 
         [Parameter()]
@@ -477,6 +503,18 @@ function Test-TargetResource
         [Parameter()]
         [System.Boolean]
         $AllowGuestDeleteChannels,
+
+        [Parameter()]
+        [System.Boolean]
+        $Archived,
+
+        [Parameter()]
+        [System.Boolean]
+        $ShowInTeamsSearchAndSuggestions,
+
+        [Parameter()]
+        [System.String]
+        $Classification,
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
@@ -552,10 +590,14 @@ function Export-TargetResource
         }
         $result = Get-TargetResource @params
         $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
-        $result.Remove("GroupID")
+
         if ("" -eq $result.Owner)
         {
             $result.Remove("Owner")
+        }
+        if ($null -eq $result.Classification)
+        {
+            $result.Remove("Classification")
         }
         $content += "        TeamsTeam " + (New-GUID).ToString() + "`r`n"
         $content += "        {`r`n"

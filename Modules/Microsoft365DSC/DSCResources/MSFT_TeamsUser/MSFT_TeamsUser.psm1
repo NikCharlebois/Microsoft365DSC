@@ -6,7 +6,11 @@ function Get-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $TeamName,
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $DisplayName,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -27,21 +31,22 @@ function Get-TargetResource
         $GlobalAdminAccount
     )
 
-    Write-Verbose -Message "Getting configuration of member $User to Team $TeamName"
+    Write-Verbose -Message "Getting configuration of member $User to Team"
 
     Test-MSCloudLogin -CloudCredential $GlobalAdminAccount `
         -Platform MicrosoftTeams
 
     $nullReturn = @{
-        User               = $User
+        GroupId            = $GroupId
         Role               = $Role
-        TeamName           = $TeamName
+        DisplayName        = $DisplayName
+        User               = $User
         Ensure             = "Absent"
         GlobalAdminAccount = $GlobalAdminAccount
     }
 
     Write-Verbose -Message "Checking for existance of Team User $User"
-    $team = Get-TeamByName $TeamName -ErrorAction SilentlyContinue
+    $team = Get-Team -GroupId $GroupId -ErrorAction SilentlyContinue
     if ($null -eq $team)
     {
         return $nullReturn
@@ -59,27 +64,28 @@ function Get-TargetResource
     try
     {
         Write-Verbose "Retrieving user without a specific Role specified"
-        $allMembers = Get-TeamUser -GroupId $team.GroupId -ErrorAction SilentlyContinue
+        $allMembers = Get-TeamChannelUser -GroupId $team.GroupId -DisplayName $DisplayName -ErrorAction SilentlyContinue
     }
     catch
     {
-        Write-Warning "The current user doesn't have the rights to access the list of members for Team {$($TeamName)}."
+        Write-Warning "The current user doesn't have the rights to access the list of members for Channel {$($DisplayName)}."
         Write-Verbose $_
         return $nullReturn
     }
 
     if ($null -eq $allMembers)
     {
-        Write-Verbose -Message "Failed to get Team's users for Team $TeamName"
+        Write-Verbose -Message "Failed to get Team's users for Team"
         return $nullReturn
     }
 
     $myUser = $allMembers | Where-Object -FilterScript { $_.User -eq $User }
     Write-Verbose -Message "Found team user $($myUser.User) with role:$($myUser.Role)"
     return @{
-        User               = $myUser.User
+        GroupId            = $GroupId
+        DisplayName        = $DisplayName
         Role               = $myUser.Role
-        TeamName           = $TeamName
+        User               = $User
         Ensure             = "Present"
         GlobalAdminAccount = $GlobalAdminAccount
     }
@@ -93,7 +99,11 @@ function Set-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $TeamName,
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $DisplayName,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -114,7 +124,7 @@ function Set-TargetResource
         $GlobalAdminAccount
     )
 
-    Write-Verbose -Message "Setting configuration of member $User to Team $TeamName"
+    Write-Verbose -Message "Setting configuration of member $User to Team"
 
     #region Telemetry
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
@@ -126,20 +136,18 @@ function Set-TargetResource
     Test-MSCloudLogin -CloudCredential $GlobalAdminAccount `
         -Platform MicrosoftTeams
 
-    $team = Get-TeamByName $TeamName
+    $team = Get-Team -GroupId $GroupId
 
     Write-Verbose -Message "Retrieve team GroupId: $($team.GroupId)"
 
     $CurrentParameters = $PSBoundParameters
-    $CurrentParameters.Remove("TeamName")
-    $CurrentParameters.Add("GroupId", $team.GroupId)
     $CurrentParameters.Remove("GlobalAdminAccount")
     $CurrentParameters.Remove("Ensure")
 
     if ($Ensure -eq "Present")
     {
         Write-Verbose -Message "Adding team user $User with role:$Role"
-        Add-TeamUser @CurrentParameters
+        Add-TeamChannelUser @CurrentParameters
     }
     else
     {
@@ -161,7 +169,11 @@ function Test-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $TeamName,
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $DisplayName,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -212,10 +224,6 @@ function Export-TargetResource
     [OutputType([System.String])]
     param
     (
-        [Parameter()]
-        [ValidateRange(1, 100)]
-        $MaxProcesses,
-
         [Parameter(Mandatory = $true)]
         [System.Management.Automation.PSCredential]
         $GlobalAdminAccount

@@ -24,6 +24,11 @@ function Get-TargetResource
         $Description,
 
         [Parameter()]
+        [System.String]
+        [ValidateSet('Standard', 'Private')]
+        $MembershipType = 'Standard',
+
+        [Parameter()]
         [ValidateSet("Present", "Absent")]
         [System.String]
         $Ensure = "Present",
@@ -50,6 +55,7 @@ function Get-TargetResource
         DisplayName        = $DisplayName
         Description        = $Description
         NewDisplayName     = $NewDisplayName
+        MembershipType     = $MembershipType
         Ensure             = "Absent"
         GlobalAdminAccount = $GlobalAdminAccount
     }
@@ -84,6 +90,7 @@ function Get-TargetResource
         return @{
             DisplayName        = $channel.DisplayName
             TeamName           = $team.DisplayName
+            MembershipType     = $channel.MembershipType
             Description        = $channel.Description
             NewDisplayName     = $NewDisplayName
             Ensure             = "Present"
@@ -119,6 +126,11 @@ function Set-TargetResource
         [System.String]
         [ValidateLength(1, 1024)]
         $Description,
+
+        [Parameter()]
+        [System.String]
+        [ValidateSet('Standard', 'Private')]
+        $MembershipType = 'Standard',
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
@@ -217,6 +229,11 @@ function Test-TargetResource
         $Description,
 
         [Parameter()]
+        [System.String]
+        [ValidateSet('Standard', 'Private')]
+        $MembershipType = 'Standard',
+
+        [Parameter()]
         [ValidateSet("Present", "Absent")]
         [System.String]
         $Ensure = "Present",
@@ -249,12 +266,19 @@ function Export-TargetResource
     [OutputType([System.String])]
     param
     (
+        [Parameter()]
+        [System.Uint32]
+        $Start,
+
+        [Parameter()]
+        [System.Uint32]
+        $End,
+
         [Parameter(Mandatory = $true)]
         [System.Management.Automation.PSCredential]
         $GlobalAdminAccount
     )
     $InformationPreference = 'Continue'
-
     #region Telemetry
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
@@ -268,29 +292,108 @@ function Export-TargetResource
     $teams = Get-Team
     $j = 1
     $content = ''
-    foreach ($team in $Teams)
+
+    $TeamsModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\MSFT_TeamsTeam\MSFT_TeamsTeam.psm1' #Custom
+    $ChannelModulePath = Join-Path $PSScriptRoot -ChildPath 'MSFT_TeamsChannel.psm1' #Custom
+    $UserModulePath = Join-Path $PSScriptRoot -ChildPath '..\MSFT_TeamsUser\MSFT_TeamsUser.psm1' #Custom
+
+    $organization = $GlobalAdminAccount.UserName.Split('@')[1]
+    for ($j = $start; $j -le $Teams.Length -and $j -le $end; $j++)
     {
+        $team = $Teams[$j-1]
         $channels = Get-TeamChannel -GroupId $team.GroupId
         $i = 1
-        Write-Information "    > [$j/$($Teams.Length)] Team {$($team.DisplayName)}"
+        $Total = $end
+        if ($end -gt $Teams.Length)
+        {
+            $total = $Teams.Length
+        }
+        Write-Information "    > [$j/$($total)] Team {$($team.DisplayName)}"
+        #region TeamsTeam - Section copied over from TeamsTeam
+        $params = @{
+            DisplayName        = $team.DisplayName
+            GlobalAdminAccount = $GlobalAdminAccount
+        }
+        Import-Module $TeamsModulePath -Force #Custom
+        $result = Get-TargetResource @params
+        $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
+        if ("" -eq $result.Owner)
+        {
+            $result.Remove("Owner")
+        }
+        if ([System.String]::IsNullOrEmpty($result.NewDisplayName))
+        {
+            $result.Remove("NewDisplayName")
+        }
+        $content += "        TeamsTeam " + (New-GUID).ToString() + "`r`n"
+        $content += "        {`r`n"
+        $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath ($TeamsModulePath.Replace("\MSFT_TeamsTeam.psm1", "")) #Custom
+        $partialContent = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"
+        $partialContent += "        }`r`n"
+        if ($partialContent.ToLower().Contains("@" + $organization.ToLower()))
+        {
+            $partialContent = $partialContent -ireplace [regex]::Escape("@" + $organization), "@`$OrganizationName"
+        }
+        $content += $partialContent
+        #endregion
         foreach ($channel in $channels)
         {
-            Write-Information "        - [$i/$($channels.Length)] $($channel.DisplayName)"
+            $channelType = '-'
+            if ($channel.MembershipType -eq 'Private')
+            {
+                $channelType = '!'
+            }
+            Write-Information "        $channelType [$i/$($channels.Length)] $($channel.DisplayName)"
             $params = @{
                 TeamName           = $team.DisplayName
                 DisplayName        = $channel.DisplayName
                 GlobalAdminAccount = $GlobalAdminAccount
             }
+            Import-Module $ChannelModulePath -Force #Custom
             $result = Get-TargetResource @params
+            if ([System.String]::IsNullOrEmpty($result.NewDisplayName))
+            {
+                $result.Remove("NewDisplayName")
+            }
             $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
             $content += "        TeamsChannel " + (New-GUID).ToString() + "`r`n"
             $content += "        {`r`n"
             $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
             $content += Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"
             $content += "        }`r`n"
+
+            if ($channel.MembershipType -eq 'Private')
+            {
+                Import-Module $UserModulePath -Force
+
+                $users = Get-TeamChannelUser -GroupId $team.GroupId -DisplayName $channel.DisplayName
+                $k = 1
+                foreach ($user in $users)
+                {
+                    Write-Information "            + [$k/$($users.Length)] $($user.User)"
+                    $getParams = @{
+                        GroupId            = $team.GroupId
+                        DisplayName        = $channel.DisplayName
+                        User               = $user.User
+                        GlobalAdminAccount = $params.GlobalAdminAccount
+                    }
+                    $result = Get-TargetResource @getParams
+                    $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
+                    $content += "        TeamsUser " + (New-GUID).ToString() + "`r`n"
+                    $content += "        {`r`n"
+                    $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath ($UserModulePath.Replace("\MSFT_TeamsUser.psm1", ""))
+                    $partialContent = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"
+                    $partialContent += "        }`r`n"
+                    if ($partialContent.ToLower().Contains($organization.ToLower()))
+                    {
+                        $partialContent = $partialContent -ireplace [regex]::Escape($organization), "`$OrganizationName"
+                    }
+                    $content += $partialContent
+                    $k++
+                }
+            }
             $i++
         }
-        $j++
     }
     return $content
 }
