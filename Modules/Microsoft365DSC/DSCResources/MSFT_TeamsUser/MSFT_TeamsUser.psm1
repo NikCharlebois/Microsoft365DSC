@@ -80,6 +80,11 @@ function Get-TargetResource
     }
 
     $myUser = $allMembers | Where-Object -FilterScript { $_.User -eq $User }
+
+    if ($null -eq $myUser)
+    {
+        return $nullReturn
+    }
     Write-Verbose -Message "Found team user $($myUser.User) with role:$($myUser.Role)"
     return @{
         GroupId            = $GroupId
@@ -147,6 +152,10 @@ function Set-TargetResource
     if ($Ensure -eq "Present")
     {
         Write-Verbose -Message "Adding team user $User with role:$Role"
+        if ($CurrentParameters.Role -eq 'Member')
+        {
+            $CurrentParameters.Remove('Role')
+        }
         Add-TeamChannelUser @CurrentParameters
     }
     else
@@ -156,7 +165,7 @@ function Set-TargetResource
             $CurrentParameters.Remove("Role")
             Write-Verbose -Message "Removed role parameter"
         }
-        Remove-TeamUser @CurrentParameters
+        #Remove-TeamUser @CurrentParameters
         Write-Verbose -Message "Removing team user $User"
     }
 }
@@ -210,8 +219,7 @@ function Test-TargetResource
         -Source $($MyInvocation.MyCommand.Source) `
         -DesiredValues $PSBoundParameters `
         -ValuesToCheck @("Ensure", `
-            "User", `
-            "Role")
+            "User")
 
     Write-Verbose -Message "Test-TargetResource returned $TestResult"
 

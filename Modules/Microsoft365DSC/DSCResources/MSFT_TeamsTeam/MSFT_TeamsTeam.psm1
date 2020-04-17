@@ -196,7 +196,7 @@ function Get-TargetResource
         {
             foreach ($owner in $Owners.User)
             {
-                $OwnersArray = $owner[0].ToString()
+                $OwnersArray = $owner.ToString()
                 break
             }
         }
