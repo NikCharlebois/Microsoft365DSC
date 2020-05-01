@@ -94,6 +94,10 @@
         @{
             ModuleName      = 'Microsoft.Graph.Groups.Group'
             RequiredVersion = '0.2.1'
+        },
+        @{
+            ModuleName      = 'Microsoft.Graph.Identity.DirectoryRoleTemplates'
+            RequiredVersion = '0.3.0'
         }
     )
 

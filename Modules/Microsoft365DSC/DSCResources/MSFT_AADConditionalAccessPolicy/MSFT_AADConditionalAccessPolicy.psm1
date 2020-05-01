@@ -66,8 +66,13 @@ function Get-TargetResource
         $IncludedApplications,
 
         [Parameter()]
+        [ValidateSet('RegisterSecurityInfo')]
         [System.String[]]
         $IncludedUserActions,
+
+        [Parameter()]
+        [System.String[]]
+        $GrantControlBuiltInControls,
 
         [Parameter()]
         [ValidateSet('Present', 'Absent')]
@@ -111,12 +116,12 @@ function Get-TargetResource
 
         #region ExcludedRegions
         $ExcludedLocationsValues = @()
-        foreach ($location in $ExcludedLocations)
+        foreach ($location in $Policy.LocationExcludeLocations)
         {
             if ($location -ne '00000000-0000-0000-0000-000000000000')
             {
-                $CurrentLocationName = Get-MgConditionalAccessNamedLocation -NamedLocationId $location
-                $ExcludedLocations += $CurrentLocationName
+                $CurrentName = Get-MgConditionalAccessNamedLocation -NamedLocationId $location
+                $ExcludedLocations += $CurrentName
             }
             else
             {
@@ -125,14 +130,14 @@ function Get-TargetResource
         }
         #endregion
 
-        #region ExcludedRegions
+        #region IncludedRegions
         $IncludedLocationsValues = @()
-        foreach ($location in $IncludedLocations)
+        foreach ($location in $Policy.LocationIncludeLocations)
         {
             if ($location -ne '00000000-0000-0000-0000-000000000000')
             {
-                $CurrentLocationName = Get-MgConditionalAccessNamedLocation -NamedLocationId $location
-                $IncludedLocationsValues += $CurrentLocationName
+                $CurrentName = Get-MgConditionalAccessNamedLocation -NamedLocationId $location
+                $IncludedLocationsValues += $CurrentName.DisplayName
             }
             else
             {
@@ -141,27 +146,161 @@ function Get-TargetResource
         }
         #endregion
 
+        #region ExcludedGroups
+        $ExcludedGroupsValues = @()
+        foreach ($group in $Policy.UserExcludeGroups)
+        {
+            $CurrentName = Get-MgGroup -GroupId $group
+            $ExcludedGroupsValues += $CurrentName.DisplayName
+        }
+        #endregion
+
+        #region IncludedGroups
+        $IncludedGroupsValues = @()
+        foreach ($group in $Policy.UserIncludeGroups)
+        {
+            $CurrentName = Get-MgGroup -GroupId $group
+            $IncludedGroupsValues += $CurrentName.DisplayName
+        }
+        #endregion
+
+        #region ExcludedUsers
+        $ExcludedUsersValues = @()
+        foreach ($user in $Policy.UserExcludeUsers)
+        {
+            if ($user -ne 'All')
+            {
+                $CurrentName = Get-MgUser -UserId $user
+                $ExcludedUsersValues += $CurrentName.UserPrincipalName
+            }
+            else
+            {
+                $ExcludedUsersValues += "All"
+            }
+        }
+        #endregion
+
+        #region IncludedUsers
+        $IncludedUsersValues = @()
+        foreach ($user in $Policy.UserIncludeUsers)
+        {
+            if ($user -ne 'All')
+            {
+                $CurrentName = Get-MgUser -UserId $user
+                $IncludedUsersValues += $CurrentName.UserPrincipalName
+            }
+            else
+            {
+                $IncludedUsersValues += "All"
+            }
+        }
+        #endregion
+
+        #region ExcludedRoles
+        $ExcludedRolesValues = @()
+        foreach ($role in $Policy.UserExcludeRoles)
+        {
+            $CurrentName = Get-MgDirectoryRoleTemplate -DirectoryRoleTemplateId $role
+            $ExcludedRolesValues += $CurrentName.UserPrincipalName
+        }
+        #endregion
+
+        #region IncludedRoles
+        $IncludedRolesValues = @()
+        foreach ($role in $Policy.UserIncludeRoles)
+        {
+            $CurrentName = Get-MgDirectoryRoleTemplate -DirectoryRoleTemplateId $role
+            $IncludedRolesValues += $CurrentName.DisplayName
+        }
+        #endregion
+
+        #region ExcludedPlatforms
+        $ExcludedPlatformsValues = @()
+        foreach ($platform in $Policy.PlatformExcludePlatforms)
+        {
+            $ExcludedPlatformsValues += $platform
+        }
+        #endregion
+
+        #region IncludedPlatforms
+        $IncludedPlatformsValues = @()
+        foreach ($platform in $Policy.PlatformIncludePlatforms)
+        {
+            $IncludedPlatformsValues += $platform
+        }
+        #endregion
+
+        #region ExcludedApplications
+        $ExcludedApplicationsValues = @()
+        foreach ($application in $Policy.ApplicationExcludeApplications)
+        {
+            if ($application -ne 'All')
+            {
+                $ExcludedApplicationsValues += $application
+            }
+            else
+            {
+                $ExcludedApplicationsValues += 'All'
+            }
+        }
+        #endregion
+
+        #region IncludedApplications
+        $IncludedApplicationValues = @()
+        foreach ($application in $Policy.ApplicationIncludeApplications)
+        {
+            if ($application -ne 'All')
+            {
+                $IncludedApplicationsValues += $application
+            }
+            else
+            {
+                $IncludedApplicationsValues += 'All'
+            }
+        }
+        #endregion
+
+        #region IncludedUserActions
+        $IncludedUserActionsValues = @()
+        foreach ($action in $Policy.ApplicationIncludeUserActions)
+        {
+            if ($action -eq 'urn:user:registersecurityinfo')
+            {
+                $IncludedUserActionsValues += "RegisterSecurityInfo"
+            }
+        }
+        #endregion
+
+        #region GrantControlBuiltInControls
+        $GrantControlBuiltInControlsValues = @()
+        foreach ($action in $Policy.GrantControlBuiltInControls)
+        {
+            $GrantControlBuiltInControlsValues += $action
+        }
+        #endregion
+
         $result = @{
-            DisplayName           = $DisplayName
-            Description           = $Policy.Description
-            State                 = $Policy.State
-            ExcludedLocations     = $ExcludedLocationsValues
-            IncludedLocations     = $IncludedLocationsValues
-            ExcludedGroups        =
-            ExcludedRoles         =
-            ExcludedUsers         =
-            IncludedGroups        =
-            IncludedRoles         =
-            IncludedUsers         =
-            ExcludedPlatforms     =
-            IncludedPlatforms     =
-            ExcludedApplications  =
-            IncludedApplications  =
-            IncludedUserActions   =
-            Ensure                = 'Present'
-            ApplicationId         =
-            TenantId              =
-            CertificateThumbprint =
+            DisplayName                 = $DisplayName
+            Description                 = $Policy.Description
+            State                       = $Policy.State
+            ExcludedLocations           = $ExcludedLocationsValues
+            IncludedLocations           = $IncludedLocationsValues
+            ExcludedGroups              = $ExcludedGroups
+            ExcludedRoles               = $ExcludedRoles
+            ExcludedUsers               = $ExcludedUsers
+            IncludedGroups              = $IncludedGroups
+            IncludedRoles               = $IncludedRoles
+            IncludedUsers               = $IncludedUsers
+            ExcludedPlatforms           = $ExcludedPlatformsValues
+            IncludedPlatforms           = $IncludedPlatformsValues
+            ExcludedApplications        = $ExcludedApplicationsValues
+            IncludedApplications        = $IncludedApplicationsValues
+            IncludedUserActions         = $IncludedUserActionsValues
+            GrantControlBuiltInControls = $GrantControlBuiltInControlsValues
+            Ensure                      = 'Present'
+            ApplicationId               = $ApplicationId
+            TenantId                    = $TenantId
+            CertificateThumbprint       = $CertificateThumbprint
         }
 
         Write-Verbose -Message "Get-TargetResource Result: `n $(Convert-M365DscHashtableToString -Hashtable $result)"
@@ -176,25 +315,78 @@ function Set-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        [ValidateSet('Yes')]
-        $IsSingleInstance,
+        $DisplayName,
 
         [Parameter()]
         [System.String]
-        $PrefixSuffixNamingRequirement,
+        $Description,
+
+        [Parameter()]
+        [ValidateSet('Enabled')]
+        [System.String]
+        $State,
 
         [Parameter()]
         [System.String[]]
-        $CustomBlockedWordsList,
+        $ExcludedLocations,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedLocations,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedGroups,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedRoles,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedUsers,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedGroups,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedRoles,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedUsers,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedPlatforms,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedPlatforms,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedApplications,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedApplications,
+
+        [Parameter()]
+        [ValidateSet('RegisterSecurityInfo')]
+        [System.String[]]
+        $IncludedUserActions,
+
+        [Parameter()]
+        [System.String[]]
+        $GrantControlBuiltInControls,
 
         [Parameter()]
         [ValidateSet('Present', 'Absent')]
         [System.String]
         $Ensure = 'Present',
-
-        [Parameter()]
-        [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount,
 
         [Parameter()]
         [System.String]
@@ -256,25 +448,78 @@ function Test-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        [ValidateSet('Yes')]
-        $IsSingleInstance,
+        $DisplayName,
 
         [Parameter()]
         [System.String]
-        $PrefixSuffixNamingRequirement,
+        $Description,
+
+        [Parameter()]
+        [ValidateSet('Enabled')]
+        [System.String]
+        $State,
 
         [Parameter()]
         [System.String[]]
-        $CustomBlockedWordsList,
+        $ExcludedLocations,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedLocations,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedGroups,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedRoles,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedUsers,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedGroups,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedRoles,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedUsers,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedPlatforms,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedPlatforms,
+
+        [Parameter()]
+        [System.String[]]
+        $ExcludedApplications,
+
+        [Parameter()]
+        [System.String[]]
+        $IncludedApplications,
+
+        [Parameter()]
+        [ValidateSet('RegisterSecurityInfo')]
+        [System.String[]]
+        $IncludedUserActions,
+
+        [Parameter()]
+        [System.String[]]
+        $GrantControlBuiltInControls,
 
         [Parameter()]
         [ValidateSet('Present', 'Absent')]
         [System.String]
         $Ensure = 'Present',
-
-        [Parameter()]
-        [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount,
 
         [Parameter()]
         [System.String]
@@ -315,10 +560,6 @@ function Export-TargetResource
     param
     (
         [Parameter()]
-        [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount,
-
-        [Parameter()]
         [System.String]
         $ApplicationId,
 
@@ -331,6 +572,7 @@ function Export-TargetResource
         $CertificateThumbprint
     )
     $InformationPreference = 'Continue'
+    $VerbosePreference = 'Continue'
     #region Telemetry
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
@@ -338,50 +580,28 @@ function Export-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
+
     $content = ''
-    $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' -InboundParameters $PSBoundParameters
-    if ($ConnectionMode -eq 'ServicePrincipal')
+    $ConnectionMode = New-M365DSCConnection -Platform 'MicrosoftGraph' -InboundParameters $PSBoundParameters
+    $policies = Get-MgConditionalAccessPolicy
+
+    foreach ($policy in $policies)
     {
         $params = @{
-            ApplicationId          = $ApplicationId
-            TenantId               = $TenantId
-            CertificateThumbprint  = $CertificateThumbprint
-            IsSingleInstance       = 'Yes'
+            ApplicationId         = $ApplicationId
+            TenantId              = $TenantId
+            CertificateThumbprint = $CertificateThumbprint
+            DisplayName           = $DisplayName
         }
-    }
-    else
-    {
-        $params = @{
-            GlobalAdminAccount = $GlobalAdminAccount
-            IsSingleInstance   = 'Yes'
-        }
-    }
 
-    $result = Get-TargetResource @params
+        $result = Get-TargetResource @params
 
-    if ($ConnectionMode -eq 'Credential')
-    {
-        $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
-        $result.Remove("ApplicationId")
-        $result.Remove("TenantId")
-        $result.Remove("CertificateThumbprint")
-    }
-    else
-    {
-        $result.Remove("GlobalAdminAccount")
-    }
-    $content += "        AADGroupsNamingPolicy " + (New-GUID).ToString() + "`r`n"
-    $content += "        {`r`n"
-    $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
-    if ($ConnectionMode -eq 'Credential')
-    {
-        $content += Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"
-    }
-    else
-    {
+        $content += "        AADConditionalAccessPolicy " + (New-GUID).ToString() + "`r`n"
+        $content += "        {`r`n"
+        $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
         $content += $currentDSCBlock
+        $content += "        }`r`n"
     }
-    $content += "        }`r`n"
 
     return $content
 }
