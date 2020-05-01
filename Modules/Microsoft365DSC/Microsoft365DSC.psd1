@@ -78,6 +78,10 @@
         @{
             ModuleName      = "Microsoft.PowerApps.Administration.PowerShell"
             RequiredVersion = "2.0.57"
+        },
+        @{
+            ModuleName      = 'Microsoft.Graph.Groups.Group'
+            RequiredVersion = '0.2.1'
         }
     )
 
