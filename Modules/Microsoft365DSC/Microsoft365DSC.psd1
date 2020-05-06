@@ -81,11 +81,11 @@
         },
         @{
             ModuleName      = "Microsoft.Graph.Authentication"
-            RequiredVersion = "0.2.0"
+            RequiredVersion = "0.5.0"
         },
         @{
             ModuleName      = "Microsoft.Graph.Identity.ConditionalAccess"
-            RequiredVersion = "0.2.1"
+            RequiredVersion = "0.5.0"
         },
         @{
             ModuleName      = "Microsoft.PowerApps.Administration.PowerShell"
@@ -93,11 +93,11 @@
         },
         @{
             ModuleName      = 'Microsoft.Graph.Groups.Group'
-            RequiredVersion = '0.2.1'
+            RequiredVersion = '0.5.0'
         },
         @{
             ModuleName      = 'Microsoft.Graph.Identity.DirectoryRoleTemplates'
-            RequiredVersion = '0.3.0'
+            RequiredVersion = '0.5.0'
         }
     )
 
