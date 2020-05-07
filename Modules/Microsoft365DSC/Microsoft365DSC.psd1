@@ -81,11 +81,11 @@
         },
         @{
             ModuleName      = "Microsoft.Graph.Authentication"
-            RequiredVersion = "0.5.0"
+            RequiredVersion = "0.5.1"
         },
         @{
             ModuleName      = "Microsoft.Graph.Identity.ConditionalAccess"
-            RequiredVersion = "0.5.0"
+            RequiredVersion = "0.5.1"
         },
         @{
             ModuleName      = "Microsoft.PowerApps.Administration.PowerShell"
@@ -93,11 +93,11 @@
         },
         @{
             ModuleName      = 'Microsoft.Graph.Groups.Group'
-            RequiredVersion = '0.5.0'
+            RequiredVersion = '0.5.1'
         },
         @{
             ModuleName      = 'Microsoft.Graph.Identity.DirectoryRoleTemplates'
-            RequiredVersion = '0.5.0'
+            RequiredVersion = '0.5.1'
         },
         @{
             ModuleName      = "DSCParser"

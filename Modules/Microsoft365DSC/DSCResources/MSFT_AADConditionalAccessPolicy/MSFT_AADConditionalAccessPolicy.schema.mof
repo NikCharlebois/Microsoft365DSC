@@ -1,11 +1,24 @@
-[ClassVersion("1.0.0.0"), FriendlyName("AADGroupsNamingPolicy")]
-class MSFT_AADGroupsNamingPolicy : OMI_BaseResource
+[ClassVersion("1.0.0.0"), FriendlyName("AADConditionalAccessPolicy")]
+class MSFT_AADConditionalAccessPolicy : OMI_BaseResource
 {
-    [Key, Description("Only valid value is 'Yes'."), ValueMap{"Yes"}, Values{"Yes"}] String IsSingleInstance;
-    [Write, Description("Prefixes and suffixes to add to the group name.")] String PrefixSuffixNamingRequirement;
-    [Write, Description("Comma delimited list of words that should be blocked from being included in groups' names.")] String CustomBlockedWordsList[];
-    [Write, Description("Specify if the Azure AD Groups Naming Policy should exist or not."), ValueMap{"Present","Absent"}, Values{"Present","Absent"}] String Ensure;
-    [Write, Description("Credentials of the Azure Active Directory Admin"), EmbeddedInstance("MSFT_Credential")] String GlobalAdminAccount;
+    [Key, Description("Display name of the Conditional Access Policy")] String DisplayName;
+    [Write, Description("Description of the Conditional Access Policy")] String Description;
+    [Write, Description("State of the policy."), ValueMap{"Enabled","Disabled"}, Values{"Enabled","Disabled"}] String State;
+    [Write, Description("List of trusted location to exclude from the policy.")] String ExcludedLocations[];
+    [Write, Description("List of trusted location to include from the policy.")] String IncludedLocations[];
+    [Write, Description("List of groups to exclude from the policy.")] String ExcludedGroups[];
+    [Write, Description("List of roles to exclude from the policy.")] String ExcludedRoles[];
+    [Write, Description("List of users to exclude from the policy.")] String ExcludedUsers[];
+    [Write, Description("List of groups to include in the policy.")] String IncludedGroups[];
+    [Write, Description("List of roles to include in the policy.")] String IncludedRoles[];
+    [Write, Description("List of users to include in the policy.")] String IncludedUsers[];
+    [Write, Description("List of platforms to exclude from the policy.")] String ExcludedPlatforms[];
+    [Write, Description("List of platforms to include in the policy.")] String IncludedPlatforms[];
+    [Write, Description("List of application to exclude from the policy.")] String ExcludedApplications[];
+    [Write, Description("List of applications to include in the policy.")] String IncludedApplications[];
+    [Write, Description("List of user actions to include in the policy.")] String IncludedUserActions[];
+    [Write, Description("Logical operator for the policy control.")] String GrantControlBuiltInControls[];
+    [Write, Description("Defines if the policy should exist or not in the tenant."), ValueMap{"Present","Absent"}, Values{"Present","Absent"}] String Ensure;
     [Write, Description("Id of the Azure Active Directory application to authenticate with.")] String ApplicationId;
     [Write, Description("Id of the Azure Active Directory tenant used for authentication.")] String TenantId;
     [Write, Description("Thumbprint of the Azure Active Directory application's authentication certificate to use for authentication.")] String CertificateThumbprint;

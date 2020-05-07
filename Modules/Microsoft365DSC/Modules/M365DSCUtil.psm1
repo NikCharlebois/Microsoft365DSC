@@ -1083,7 +1083,7 @@ function New-M365DSCConnection
                 -not [System.String]::IsNullOrEmpty($InboundParameters.TenantId) -and `
                 -not [System.String]::IsNullOrEmpty($InboundParameters.CertificateThumbprint))
             {
-                Write-Verbose -Message "GlobalAdminAccount was specified. Connecting via User Principal"
+                Write-Verbose -Message "ApplicationId was specified. Connecting via Service Principal"
                 Test-MSCloudLogin -Platform $Platform `
                     -ApplicationId $InboundParameters.ApplicationId `
                     -TenantId $InboundParameters.TenantId `

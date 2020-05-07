@@ -92,7 +92,6 @@ function Get-TargetResource
         $CertificateThumbprint
     )
 
-    Write-Verbose -Message "Getting configuration of AzureAD Groups Naming Policy"
     #region Telemetry
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
@@ -100,19 +99,22 @@ function Get-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
+    Write-Verbose -Message "Connecting to the Microsoft Graph"
     $ConnectionMode = New-M365DSCConnection -Platform 'MicrosoftGraph' -InboundParameters $PSBoundParameters
 
+    Write-Verbose -Message "Getting configuration of Azure AD Conditional Access Policy {$DisplayName}"
     $Policy = Get-MgConditionalAccessPolicy -Filter "DisplayName eq '$DisplayName'"
 
     if ($null -eq $Policy)
     {
+        Write-Verbose -Message "Azure AD Conditional Access Policy {$DisplayName} was not found."
         $currentValues = $PSBoundParameters
         $currentValues.Ensure = "Absent"
         return $currentValues
     }
     else
     {
-        Write-Verbose "Found existing AzureAD Conditional Access Policy {$DisplayName}"
+        Write-Verbose "Found existing Azure AD Conditional Access Policy {$DisplayName}"
 
         #region ExcludedRegions
         $ExcludedLocationsValues = @()
@@ -279,10 +281,20 @@ function Get-TargetResource
         }
         #endregion
 
+        # Make sure we capitalize the first letter to be consistent with other resources.
+        $stateValue = $Policy.State
+        if ($stateValue -eq 'enabled')
+        {
+            $stateValue = 'Enabled'
+        }
+        else
+        {
+            $stateValue = 'Disabled'
+        }
         $result = @{
             DisplayName                 = $DisplayName
             Description                 = $Policy.Description
-            State                       = $Policy.State
+            State                       = $stateValue
             ExcludedLocations           = $ExcludedLocationsValues
             IncludedLocations           = $IncludedLocationsValues
             ExcludedGroups              = $ExcludedGroups
@@ -401,7 +413,7 @@ function Set-TargetResource
         $CertificateThumbprint
     )
 
-    Write-Verbose -Message "Setting configuration of Azure AD Groups Naming Policy"
+    Write-Verbose -Message "Setting configuration of Azure AD Conditional Access Policy {$DisplayName}"
     #region Telemetry
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
@@ -412,31 +424,33 @@ function Set-TargetResource
     $currentPolicy = Get-TargetResource @PSBoundParameters
 
     # Policy should exist but it doesn't
-    $needToUpdate = $false
     if ($Ensure -eq "Present" -and $currentPolicy.Ensure -eq "Absent")
     {
-        $ds = (Get-AzureADDirectorySettingTemplate -id 62375ab9-6b52-47ed-826b-58e47e0e304b).CreateDirectorySetting()
-        New-AzureADDirectorySetting -DirectorySetting $ds
-        $needToUpdate = $true
+        Write-Verbose -Message "Policy {$DisplayName} doesn't exist but should. Creating it."
+        $CreationParams = $PSBoundParameters
+        $CreationParams.Remove("Ensure")
+        $CreationParams.Remove("ApplicationId")
+        $CreationParams.Remove("TenantId")
+        $CreationParams.Remove("CertificateThumbprint")
+        $CreationParams.State = $CreationParams.State.ToLower()
+        New-MgConditionalAccessNamedLocation @CreationParams
     }
-
-    $Policy = Get-AzureADDirectorySetting | Where-Object -FilterScript {$_.DisplayName -eq "Group.Unified"}
-
-    if (($Ensure -eq 'Present' -and $currentPolicy.Ensure -eq 'Present') -or $needToUpdate)
+    elseif ($Ensure -eq 'Present' -and $currentPolicy.Ensure -eq 'Present')
     {
-        $Policy["PrefixSuffixNamingRequirement"] = $PrefixSuffixNamingRequirement
-
-        [string]$blockedWordsValue = $null
-
-        $blockedWordsValue = $CustomBlockedWordsList -join ","
-        $Policy["CustomBlockedWordsList"] = $blockedWordsValue
-
-        Set-AzureADDirectorySetting -Id $Policy.id -DirectorySetting $Policy
+        Write-Verbose -Message "Policy {$DisplayName} already exists but needs to be updated. Updating it."
+        $UpdateParams = $PSBoundParameters
+        $UpdateParams.Remove("Ensure")
+        $UpdateParams.Remove("ApplicationId")
+        $UpdateParams.Remove("TenantId")
+        $UpdateParams.Remove("CertificateThumbprint")
+        $UpdateParams.State = $UpdateParams.State.ToLower()
+        Update-MgConditionalAccessPolicy -ConditionalAccessPolicyId $currentPolicy.Id -BodyParameter @UpdateParams
     }
     elseif ($Ensure -eq 'Absent' -and $currentPolicy.Ensure -eq 'Present')
     {
-        $Policy = Get-AzureADDirectorySetting | Where-Object -FilterScript {$_.DisplayName -eq "Group.Unified"}
-        Remove-AzureADDirectorySetting -Id $policy.Id
+        # Due to a lack of a Remove-MgConditionalAccessPolicy cmdlet, we can only disable the rule for now;
+        Write-Verbose -Message "Policy {$DisplayName} exists but shouldn't. Disabling it."
+        Update-MgConditionalAccessPolicy -ConditionalAccessPolicyId $currentPolicy.Id -BodyParameter @{State = 'disabled'}
     }
 }
 
@@ -534,14 +548,16 @@ function Test-TargetResource
         $CertificateThumbprint
     )
 
-    Write-Verbose -Message "Testing configuration of AzureAD Groups Naming Policy"
+    Write-Verbose -Message "Testing configuration of Azure AD Conditional Policy {$DisplayName}"
 
     $CurrentValues = Get-TargetResource @PSBoundParameters
 
     Write-Verbose -Message "Target Values: $(Convert-M365DscHashtableToString -Hashtable $PSBoundParameters)"
 
     $ValuesToCheck = $PSBoundParameters
-    $ValuesToCheck.Remove('GlobalAdminAccount') | Out-Null
+    $ValuesToCheck.Remove('ApplicationId') | Out-Null
+    $ValuesToCheck.Remove('TenantId') | Out-Null
+    $ValuesToCheck.Remove('CertificateThumbprint') | Out-Null
 
     $TestResult = Test-Microsoft365DSCParameterState -CurrentValues $CurrentValues `
         -Source $($MyInvocation.MyCommand.Source) `
@@ -572,7 +588,6 @@ function Export-TargetResource
         $CertificateThumbprint
     )
     $InformationPreference = 'Continue'
-    $VerbosePreference = 'Continue'
     #region Telemetry
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
@@ -580,18 +595,18 @@ function Export-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
-
-    $content = ''
     $ConnectionMode = New-M365DSCConnection -Platform 'MicrosoftGraph' -InboundParameters $PSBoundParameters
-    $policies = Get-MgConditionalAccessPolicy
-
+    $content = ''
+    [array] $policies = Get-MgConditionalAccessPolicy
+    $i = 1
     foreach ($policy in $policies)
     {
+        Write-Information -MessageData "    [$i/$($policies.Length)] $($policy.DisplayName)"
         $params = @{
             ApplicationId         = $ApplicationId
             TenantId              = $TenantId
             CertificateThumbprint = $CertificateThumbprint
-            DisplayName           = $DisplayName
+            DisplayName           = $policy.DisplayName
         }
 
         $result = Get-TargetResource @params
@@ -601,6 +616,7 @@ function Export-TargetResource
         $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
         $content += $currentDSCBlock
         $content += "        }`r`n"
+        $i++
     }
 
     return $content
