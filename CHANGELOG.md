@@ -2,6 +2,16 @@
 
 ## UNRELEASED
 
+* Modules
+  * M365DSCUtil - Fixed an issue in Test-Microsoft365DSCParameterState where
+    the same array of object was always being compared;
+
+* Metadata
+  * Updated MSCloudLoginAssistant to 1.0.15;
+  * Updated SharePointPnPPowerShellOnline to 3.21.2005.1;
+
+## 1.0.5.128
+
 * AADGroupsNamingPolicy
   * Added support for AzureAD Application Authentication;
 * AADGroupsSettings
@@ -26,7 +36,7 @@
 * Metadata
   * Updated Microsoft.PowerApps.Administration.PowerShell to 2.0.57;
   * Updated MicrosoftTeams to 1.0.6;
-  * Updated MSCloudLoginAssistant to 1.0.12;
+  * Updated MSCloudLoginAssistant to 1.0.14;
   * Introduced dependency on the EXchangeOnlineManagement module;
   * Introduced dependency on the Microsoft.Graph.Authentication module;
   * Introduced dependency on the Microsoft.Graph.Identity.ConditionalAccess

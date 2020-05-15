@@ -492,11 +492,17 @@ function Export-TargetResource
     #endregion
     $rules = Get-DLPComplianceRule | Where-Object { $_.Mode -ne 'PendingDeletion' }
 
+    $organization = ""
+    if ($GlobalAdminAccount.UserName.Contains("@"))
+    {
+        $organization = $GlobalAdminAccount.UserName.Split("@")[1]
+    }
+
     $i = 1
     $DSCContent = ""
     foreach ($rule in $rules)
     {
-        Write-Information "    - [$i/$($rules.Length)] $($rule.Name)"
+        Write-Information "    [$i/$($rules.Length)] $($rule.Name)"
         $result = Get-TargetResource -Name $rule.Name -Policy $rule.ParentPolicyName -GlobalAdminAccount $GlobalAdminAccount
 
         $IsCIMArray = $false
@@ -512,6 +518,10 @@ function Export-TargetResource
         $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "ContentContainsSensitiveInformation" -IsCIMArray $IsCIMArray
 
         $partialContent = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"
+        if ($partialContent.ToLower().IndexOf($organization.ToLower()) -gt 0)
+        {
+            $partialContent = $partialContent -ireplace [regex]::Escape("@" + $organization), "@`$OrganizationName"
+        }
         $partialContent += "        }`r`n"
         $DSCContent += $partialContent
         $i++

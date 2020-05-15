@@ -29,7 +29,7 @@ function Start-M365DSCConfigurationExtract
 
         [Parameter()]
         [System.String]
-        $ConfigurationName = 'O365TenantConfig',
+        $ConfigurationName = 'M365TenantConfig',
 
         [Parameter()]
         [ValidateRange(1, 100)]
@@ -44,6 +44,10 @@ function Start-M365DSCConfigurationExtract
         [ValidateSet('Lite', 'Default', 'Full')]
         [System.String]
         $Mode,
+
+        [Parameter()]
+        [System.Boolean]
+        $GenerateInfo = $false,
 
         [Parameter()]
         [System.String]
@@ -102,10 +106,12 @@ function Start-M365DSCConfigurationExtract
     }
 
     $AzureAutomation = $false
-
+    $version = (Get-Module 'Microsoft365DSC').Version
+    $DSCContent = "# Generated with Microsoft365DSC version $version`r`n"
+    $DSCContent += "# For additional information on how to use Microsoft365DSC, please visit https://aka.ms/M365DSC`r`n"
     if ($ConnectionMode -eq 'Credential')
     {
-        $DSCContent = "param (`r`n"
+        $DSCContent += "param (`r`n"
         $DSCContent += "    [parameter()]`r`n"
         $DSCContent += "    [System.Management.Automation.PSCredential]`r`n"
         $DSCContent += "    `$GlobalAdminAccount`r`n"
@@ -227,8 +233,9 @@ function Start-M365DSCConfigurationExtract
                 }
             }
             if (($null -ne $ComponentsToExtract -and
-                    ($ComponentsToExtract -contains $resourceName -or $ComponentsToExtract -contains ("chck" + $resourceName))) -or
-                $AllComponents -or ($null -ne $Workloads -and $Workloads -contains $currentWorkload) -or ![System.String]::IsNullOrEmpty($Mode))
+                ($ComponentsToExtract -contains $resourceName -or $ComponentsToExtract -contains ("chck" + $resourceName))) -or
+                $AllComponents -or ($null -ne $Workloads -and $Workloads -contains $currentWorkload) -or `
+                ($null -eq $ComponentsToExtract -and $null -eq $Workloads))
             {
                 Import-Module $ResourceModule.FullName | Out-Null
 
@@ -240,36 +247,44 @@ function Start-M365DSCConfigurationExtract
                     $CertThumbprintExists = (Get-Command 'Export-TargetResource').Parameters.Keys.Contains("CertificateThumbprint")
                     $TenantIdExists = (Get-Command 'Export-TargetResource').Parameters.Keys.Contains("TenantId")
                     $AppIdExists = (Get-Command 'Export-TargetResource').Parameters.Keys.Contains("ApplicationId")
+                    $GlobalAdminExists = (Get-Command 'Export-TargetResource').Parameters.Keys.Contains("GlobalAdminAccount")
 
                     $parameters = @{}
-                    if ($nulll -ne $GlobalAdminAccount)
+                    if ($GlobalAdminExists-and -not [System.String]::IsNullOrEmpty($GlobalAdminAccount))
                     {
                         $parameters.Add("GlobalAdminAccount", $GlobalAdminAccount)
                     }
-                    if ($MaxProcessesExists)
+                    if ($MaxProcessesExists -and -not [System.String]::IsNullOrEmpty($MaxProcessesExists))
                     {
-                        $parameters.Add("MaxProcesses", $MaxProcesses)
+                        $parameters.Add("MaxProcesses", $MaxProcessesExists)
                     }
-                    if ($AppSecretExists)
+                    if ($AppSecretExists -and -not [System.String]::IsNullOrEmpty($ApplicationSecret))
                     {
                         $parameters.Add("AppplicationSecret", $ApplicationSecret)
                     }
-                    if ($CertThumbprintExists)
+                    if ($CertThumbprintExists -and -not [System.String]::IsNullOrEmpty($CertificateThumbprint))
                     {
                         $parameters.Add("CertificateThumbprint", $CertificateThumbprint)
                     }
-                    if ($TenantIdExists)
+                    if ($TenantIdExists -and -not [System.String]::IsNullOrEmpty($TenantId))
                     {
                         $parameters.Add("TenantId", $TenantId)
                     }
-                    if ($AppIdExists)
+                    if ($AppIdExists -and -not [System.String]::IsNullOrEmpty($ApplicationId))
                     {
                         $parameters.Add("ApplicationId", $ApplicationId)
                     }
 
-                    $exportString = Export-TargetResource @parameters
+                    $exportString = ""
+                    if ($GenerateInfo)
+                    {
+                        $exportString += "`r`n        # For information on how to use this resource, please refer to:`r`n"
+                        $exportString += "        # https://github.com/microsoft/Microsoft365DSC/wiki/$resourceName`r`n"
+                    }
+                    $exportString += Export-TargetResource @parameters
                 }
                 $DSCContent += $exportString
+                $exportString = $null
             }
         }
         catch
