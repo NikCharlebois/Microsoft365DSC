@@ -941,7 +941,7 @@ function New-M365DSCConnection
         [System.Collections.Hashtable]
         $InboundParameters
     )
-
+$VerbosePreference = 'Continue'
     switch ($Platform)
     {
         {$_ -eq 'AzureAD' -or $_ -eq 'MicrosoftTeams' -or $_ -eq 'MicrosoftGraph'}
@@ -985,7 +985,7 @@ function New-M365DSCConnection
                 Test-MSCloudLogin -Platform $Platform `
                     -ApplicationId $InboundParameters.ApplicationId `
                     -TenantId $InboundParameters.TenantId `
-                    -CertificateThumbprint $InboundParameters.CertificateThumbprint
+                    -CertificateThumbprint $InboundParameters.CertificateThumbprint -Verbose $true
                 return 'ServicePrincipal'
             }
         }

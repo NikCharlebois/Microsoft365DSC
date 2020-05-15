@@ -99,7 +99,12 @@ function Get-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
-    Write-Verbose -Message "Connecting to the Microsoft Graph"
+    Write-Verbose -Message "!!!$($env:USERDNSDOMAIN)"
+    Write-Verbose -Message "!!!$($env:USERDOMAIN)"
+    Write-Verbose -Message "!!!$($env:USERPROFILE)"
+    Write-Verbose -Message "!!!$($env:USERNAME)"
+    Write-Verbose -Message "@@@$([Security.Principal.WindowsIdentity]::GetCurrent())"
+    Write-Verbose -Message "Connecting to the Microsoft Graph..."
     $ConnectionMode = New-M365DSCConnection -Platform 'MicrosoftGraph' -InboundParameters $PSBoundParameters
 
     Write-Verbose -Message "Getting configuration of Azure AD Conditional Access Policy {$DisplayName}"
@@ -114,7 +119,7 @@ function Get-TargetResource
     }
     else
     {
-        Write-Verbose "Found existing Azure AD Conditional Access Policy {$DisplayName}"
+        Write-Verbose -Message "Found existing Azure AD Conditional Access Policy {$DisplayName}"
 
         #region ExcludedRegions
         $ExcludedLocationsValues = @()
@@ -552,6 +557,7 @@ function Test-TargetResource
 
     $CurrentValues = Get-TargetResource @PSBoundParameters
 
+    Write-Verbose -Message "Back from the Get-TargetResource function"
     Write-Verbose -Message "Target Values: $(Convert-M365DscHashtableToString -Hashtable $PSBoundParameters)"
 
     $ValuesToCheck = $PSBoundParameters
