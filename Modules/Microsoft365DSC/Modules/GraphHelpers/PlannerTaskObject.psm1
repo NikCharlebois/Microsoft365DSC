@@ -1,10 +1,10 @@
 class PlannerTaskObject
 {
-    [string]$PlanId
-    [string]$TaskId
+    [string]$PlanName
     [string]$Title
+    [string]$TaskId
     [string]$Notes
-    [string]$BucketId
+    [string]$BucketName
     [string]$ETag
     [string[]]$Assignments
     [System.Collections.Hashtable[]]$Attachments
@@ -46,9 +46,23 @@ class PlannerTaskObject
         return $null
     }
 
-    [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskId)
+    [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskName, [string]$PlanId)
     {
-        $uri = "https://graph.microsoft.com/beta/planner/tasks/$TaskId"
+        $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
+        $TasksInPlanResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        $TaskIdValue = $null
+        foreach ($task in $TasksInPlanResponse.Value)
+        {
+            if ($task.title -eq $TaskName)
+            {
+                $TaskIdValue = $task.id
+                break
+            }
+        }
+        $uri = "https://graph.microsoft.com/beta/planner/tasks/$TaskIdValue"
         $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
             -ApplicationId $ApplicationId `
             -Uri $uri `
@@ -115,14 +129,12 @@ class PlannerTaskObject
         }
         #endregion
         $this.Etag                 = $taskResponse.'@odata.etag'
+        $this.TaskId               = $taskResponse.id
         $this.Title                = $taskResponse.title
         $this.StartDateTime        = $taskResponse.startDateTime
         $this.ConversationThreadId = $taskResponse.conversationThreadId
         $this.DueDateTime          = $taskResponse.dueDateTime
         $this.CompletedDateTime    = $taskResponse.completedDateTime
-        $this.PlanId               = $taskResponse.planId
-        $this.TaskId               = $taskResponse.id
-        $this.BucketId             = $taskResponse.bucketId
         $this.Priority             = $taskResponse.priority
         $this.Notes                = $taskDetailsResponse.description.Replace('"', '`"').Replace('“', '`"').Replace('”', '`"')
         $this.Assignments          = $assignmentsValue

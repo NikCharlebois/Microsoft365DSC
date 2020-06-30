@@ -6,7 +6,11 @@ function Get-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $PlanId,
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -22,11 +26,7 @@ function Get-TargetResource
 
         [Parameter()]
         [System.String]
-        $Bucket,
-
-        [Parameter()]
-        [System.String]
-        $TaskId,
+        $BucketName,
 
         [Parameter()]
         [System.String]
@@ -86,17 +86,11 @@ function Get-TargetResource
     #endregion
 
     $nullReturn = @{
-        PlanId                = $PlanId
+        PlanName              = $PlanName
         Title                 = $Title
         Ensure                = "Absent"
         ApplicationId         = $ApplicationId
         GlobalAdminAccount    = $GlobalAdminAccount
-    }
-
-    # If no TaskId were passed, automatically assume that this is a new task;
-    if ([System.String]::IsNullOrEmpty($TaskId))
-    {
-        return $nullReturn
     }
 
     try
@@ -113,7 +107,11 @@ function Get-TargetResource
     }
     $task = [PlannerTaskObject]::new()
     Write-Verbose -Message "Populating task {$taskId} from the Get method"
-    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskId)
+    $PlanId = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName `
+                  -GroupId $GroupId `
+                  -ApplicationId $ApplicationId `
+                  -GlobalAdminAccount $GlobalAdminAccount
+    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $Title, $PlanId)
 
     if ($null -eq $task)
     {
@@ -121,6 +119,23 @@ function Get-TargetResource
     }
     else
     {
+        #region Plan Name
+        [array]$plan = Get-M365DSCPlannerPlansFromGroup -ApplicationId $ApplicationId `
+                    -GroupId $GroupId `
+                    -GlobalAdminAccount $GlobalAdminAccount | Where {$_.Title -eq $PlanName}
+        $PlanNameValue = $plan[0].Title
+        #endregion
+
+        #region Bucket Name
+        $BucketNameValue = $null
+        if (-not [System.String]::IsNullOrEmpty($BucketName))
+        {
+            $BucketNameValue = Get-M365DSCPlannerBucketNameByTaskId -ApplicationId $ApplicationId `
+                    -TaskId $PlanId `
+                    -GlobalAdminAccount $GlobalAdminAccount
+        }
+        #endregion
+
         $NotesValue = $task.Notes
 
         #region Task Assignment
@@ -155,14 +170,14 @@ function Get-TargetResource
             $DueDateTimeValue = $task.DueDateTime
         }
         $results = @{
-            PlanId                = $PlanId
+            GroupId               = $GroupId
+            PlanName              = $PlanNameValue
             Title                 = $Title
             AssignedUsers         = $assignedValues
-            TaskId                = $task.TaskId
             Categories            = $categoryValues
             Attachments           = $task.Attachments
             Checklist             = $task.Checklist
-            Bucket                = $task.BucketId
+            BucketName            = $BucketNameValue
             Priority              = $task.Priority
             ConversationThreadId  = $task.ConversationThreadId
             PercentComplete       = $task.PercentComplete
@@ -185,7 +200,11 @@ function Set-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $PlanId,
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -198,6 +217,10 @@ function Set-TargetResource
         [Parameter()]
         [System.String]
         $Notes,
+
+        [Parameter()]
+        [System.String]
+        $BucketName,
 
         [Parameter()]
         [System.String]
@@ -282,12 +305,6 @@ function Set-TargetResource
     }
     $task = [PlannerTaskObject]::new()
 
-    if (-not [System.String]::IsNullOrEmpty($TaskId))
-    {
-        Write-Verbose -Message "Populating Task {$TaskId} from the Set method"
-        $task.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskId)
-    }
-
     $task.BucketId             = $Bucket
     $task.Title                = $Title
     $task.PlanId               = $PlanId
@@ -369,7 +386,7 @@ function Set-TargetResource
         Write-Verbose -Message "Planner Task {$Title} already exists, but is not in the `
             Desired State. Updating it."
         $task.Update($GlobalAdminAccount, $ApplicationId)
-        #endregion
+
     }
     elseif ($Ensure -eq 'Absent' -and $currentValues.Ensure -eq 'Present')
     {
@@ -387,7 +404,11 @@ function Test-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $PlanId,
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -403,11 +424,7 @@ function Test-TargetResource
 
         [Parameter()]
         [System.String]
-        $Bucket,
-
-        [Parameter()]
-        [System.String]
-        $TaskId,
+        $BucketName,
 
         [Parameter()]
         [System.String]
@@ -546,11 +563,11 @@ function Export-TargetResource
                 {
                     Write-Information "            [$k/$($tasks.Length)] $($task.Title)"
                     $params = @{
-                        TaskId                = $task.Id
-                        PlanId                = $plan.Id
-                        Title                 = $task.Title
-                        ApplicationId         = $ApplicationId
-                        GlobalAdminAccount    = $GlobalAdminAccount
+                        GroupId            = $group.ObjectId
+                        PlanName           = $plan.Title
+                        Title              = $task.Title
+                        ApplicationId      = $ApplicationId
+                        GlobalAdminAccount = $GlobalAdminAccount
                     }
 
                     $result = Get-TargetResource @params
@@ -740,6 +757,77 @@ function Get-M365DSCPlannerPlansFromGroup
         }
     }
     return $results
+}
+
+function Get-M365DSCPlannerBucketNameByTaskId
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $TaskId,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $GlobalAdminAccount,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ApplicationId
+    )
+    $uri = "https://graph.microsoft.com/v1.0/planner/tasks/$TaskId"
+    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+        -ApplicationId $ApplicationId `
+        -Uri $uri `
+        -Method Get
+    $bucketID = $taskResponse.value.bucketId
+
+    $uri = "https://graph.microsoft.com/v1.0/planner/buckets/$bucketID"
+    $bucketResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+        -ApplicationId $ApplicationId `
+        -Uri $uri `
+        -Method Get
+    $bucketName = $bucketResponse.value.name
+    return $bucketName
+}
+
+function Get-M365DSCPlannerPlanIdByName
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $GlobalAdminAccount,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ApplicationId
+    )
+    $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
+    $planResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+        -ApplicationId $ApplicationId `
+        -Uri $uri `
+        -Method Get
+    $PlanId = $null
+    foreach ($plan in $planResponse.value)
+    {
+        if ($plan.title -eq $PlanName)
+        {
+            $PlanId = $plan.id
+            break
+        }
+    }
+    return $PlanId
 }
 
 function Get-M365DSCPlannerTasksFromPlan
