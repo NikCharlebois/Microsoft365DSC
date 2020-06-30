@@ -124,7 +124,7 @@ class PlannerTaskObject
         $this.TaskId               = $taskResponse.id
         $this.BucketId             = $taskResponse.bucketId
         $this.Priority             = $taskResponse.priority
-        $this.Notes                = $taskDetailsResponse.description
+        $this.Notes                = $taskDetailsResponse.description.Replace('"', '`"').Replace('“', '`"').Replace('”', '`"')
         $this.Assignments          = $assignmentsValue
         $this.Attachments          = $attachmentsValue
         $this.Categories           = $categoriesValue
