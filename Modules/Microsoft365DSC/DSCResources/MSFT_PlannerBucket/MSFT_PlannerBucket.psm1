@@ -47,6 +47,14 @@ function Get-TargetResource
     {
         throw "Multiple plans with name {$GroupName} were found for Group {$GroupId}"
     }
+    elseif ($plan.Length -eq 1)
+    {
+        Write-Verbose -Message "Found Plan {$PlanName} with Id {$($plan.Id)}"
+    }
+    else
+    {
+        Write-Verbose -Message "Could not find Plan {$PlanName}"
+    }
 
     [Array]$buckets = Get-M365DSCPlannerBucketsFromPlan -GroupId $GroupId `
                           -PlanName $PlanName `
@@ -128,8 +136,17 @@ function Set-TargetResource
 
     if ($Ensure -eq 'Present' -and $currentValues.Ensure -eq 'Absent')
     {
+        [array]$plans = Get-M365DSCPlannerPlansFromGroup -GroupId $GroupId `
+                -ApplicationID $ApplicationId `
+                -GlobalAdminAccount $GlobalAdminAccount
+        [array]$plan = $plans | Where-Object -FilterScript {$_.Title -eq $PlanName}
+
+        if ($plan.Length -gt 1)
+        {
+            throw "Multiple plans with name {$GroupName} were found for Group {$GroupId}"
+        }
         Write-Verbose -Message "Planner Bucket {$Name} doesn't already exist. Creating it."
-        New-M365DSCPlannerBucket -Name $Name -PlanId $PlanId `
+        New-M365DSCPlannerBucket -Name $Name -PlanId $plan.Id `
             -ApplicationId $ApplicationId `
             -GlobalAdminAccount $GlobalAdminAccount | Out-Null
     }

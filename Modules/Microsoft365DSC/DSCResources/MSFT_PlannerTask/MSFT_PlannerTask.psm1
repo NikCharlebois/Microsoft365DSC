@@ -106,19 +106,21 @@ function Get-TargetResource
         . $usingScript
     }
     $task = [PlannerTaskObject]::new()
-    Write-Verbose -Message "Populating task {$taskId} from the Get method"
+    Write-Verbose -Message "Populating task {$Title} from the Get method"
     $PlanId = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName `
                   -GroupId $GroupId `
                   -ApplicationId $ApplicationId `
                   -GlobalAdminAccount $GlobalAdminAccount
+    Write-Verbose -Message "Found Plan ID {$PlanId} from the Get method"
     $task.PopulateById($GlobalAdminAccount, $ApplicationId, $Title, $PlanId)
 
-    if ($null -eq $task)
+    if ([System.String]::IsNullOrEmpty($task.Title))
     {
         return $nullReturn
     }
     else
     {
+        Write-Verbose -Message "Task {$Title} was successfully populated from the Get method."
         #region Plan Name
         [array]$plan = Get-M365DSCPlannerPlansFromGroup -ApplicationId $ApplicationId `
                     -GroupId $GroupId `
@@ -287,8 +289,6 @@ function Set-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
-    Connect-Graph -Scopes "Group.ReadWrite.All" | Out-Null
-
     $currentValues = Get-TargetResource @PSBoundParameters
 
     try
@@ -305,6 +305,10 @@ function Set-TargetResource
     }
     $task = [PlannerTaskObject]::new()
 
+    $PlanId = Get-M365DSCPlannerPlanIdByName -GlobalAdminAccount $GlobalAdminAccount `
+        -ApplicationId $ApplicationId `
+        -GroupId $GroupId `
+        -PlanName $PlanName
     $task.BucketId             = $Bucket
     $task.Title                = $Title
     $task.PlanId               = $PlanId
@@ -373,6 +377,18 @@ function Set-TargetResource
             $checklistArray +=$checklistItemValue
         }
         $task.Checklist = $checklistArray
+    }
+    #endregion
+
+    #region Bucket
+    if (-Not [System.String]::IsNullOrEmpty($BucketName))
+    {
+        [array]$buckets = Get-M365DSCPlannerBucketsFromPlan -GroupId $GroupId `
+            -ApplicationId $ApplicationId `
+            -GlobalAdminAccount $GlobalAdminAccount `
+            -PlanId $PlanId `
+            -PlanName $PlanName | Where-Object -FilterScript {$_.Name -eq $BucketName}
+        $task.BucketId = $buckets[0].Id
     }
     #endregion
 
@@ -890,6 +906,7 @@ function Get-M365DSCPlannerBucketsFromPlan
             Name     = $bucket.name
             PlanName = $PlanName
             GroupId  = $GroupId
+            Id       = $bucket.id
         }
     }
     return $results

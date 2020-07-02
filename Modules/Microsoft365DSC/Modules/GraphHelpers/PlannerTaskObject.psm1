@@ -1,10 +1,12 @@
 class PlannerTaskObject
 {
     [string]$PlanName
+    [string]$PlanId
     [string]$Title
     [string]$TaskId
     [string]$Notes
     [string]$BucketName
+    [string]$BucketId
     [string]$ETag
     [string[]]$Assignments
     [System.Collections.Hashtable[]]$Attachments
@@ -48,6 +50,8 @@ class PlannerTaskObject
 
     [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskName, [string]$PlanId)
     {
+        $VerbosePreference = "Continue"
+        Write-Verbose -Message "Trying to get the Task ID"
         $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
         $TasksInPlanResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
             -ApplicationId $ApplicationId `
@@ -62,91 +66,95 @@ class PlannerTaskObject
                 break
             }
         }
-        $uri = "https://graph.microsoft.com/beta/planner/tasks/$TaskIdValue"
-        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-            -ApplicationId $ApplicationId `
-            -Uri $uri `
-            -Method Get
-        $taskDetailsResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-            -ApplicationId $ApplicationId `
-            -Uri ($uri + "/details") `
-            -Method Get
-
-        #region Assignments
-        $assignmentsValue = @()
-        if ($null -ne $taskResponse.assignments)
+        if (-not [System.String]::IsNullOrEmpty($TaskIdValue))
         {
-            $allAssignments = $taskResponse.assignments | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
-            foreach ($assignment in $allAssignments)
-            {
-                $assignmentsValue += $assignment.Name
-            }
-        }
-        #endregion
+            Write-Verbose -Message "Found TaskIdValue {$TaskIdValue}"
+            $uri = "https://graph.microsoft.com/beta/planner/tasks/$TaskIdValue"
+            $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+                -ApplicationId $ApplicationId `
+                -Uri $uri `
+                -Method Get
+            $taskDetailsResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+                -ApplicationId $ApplicationId `
+                -Uri ($uri + "/details") `
+                -Method Get
 
-        #region Attachments
-        $attachmentsValue = @()
-        if ($null -ne $taskDetailsResponse.references)
-        {
-            $allAttachments = $taskDetailsResponse.references | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
-            foreach ($attachment in $allAttachments)
+            #region Assignments
+            $assignmentsValue = @()
+            if ($null -ne $taskResponse.assignments)
             {
-                $hashEntry = @{
-                    Uri   = $attachment.Name
-                    Alias = $taskDetailsResponse.references.($attachment.Name).alias
-                    Type  = $taskDetailsResponse.references.($attachment.Name).type
+                $allAssignments = $taskResponse.assignments | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
+                foreach ($assignment in $allAssignments)
+                {
+                    $assignmentsValue += $assignment.Name
                 }
-                $attachmentsValue += $hashEntry
             }
-        }
-        #endregion
+            #endregion
 
-        #region Categories
-        $categoriesValue = @()
-        if ($null -ne $taskResponse.appliedCategories)
-        {
-            $allCategories = $taskResponse.appliedCategories | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
-            foreach ($category in $allCategories)
+            #region Attachments
+            $attachmentsValue = @()
+            if ($null -ne $taskDetailsResponse.references)
             {
-                $categoriesValue += $this.GetTaskColorNameByCategory($category.Name)
-            }
-        }
-        #endregion
-
-        #region Checklist
-        $checklistValue = @()
-        if ($null -ne $taskDetailsResponse.checklist)
-        {
-            $allCheckListItems = $taskDetailsResponse.checklist | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
-            foreach ($checkListItem in $allCheckListItems)
-            {
-                $hashEntry = @{
-                    Title     = $taskDetailsResponse.checklist.($checkListItem.Name).title
-                    Completed = [bool]$taskDetailsResponse.checklist.($checkListItem.Name).isChecked
+                $allAttachments = $taskDetailsResponse.references | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
+                foreach ($attachment in $allAttachments)
+                {
+                    $hashEntry = @{
+                        Uri   = $attachment.Name
+                        Alias = $taskDetailsResponse.references.($attachment.Name).alias
+                        Type  = $taskDetailsResponse.references.($attachment.Name).type
+                    }
+                    $attachmentsValue += $hashEntry
                 }
-                $checklistValue += $hashEntry
             }
-        }
-        #endregion
+            #endregion
 
-        $taskNotesValue = $null
-        if (-not [System.String]::IsNullOrEmpty($taskDetailsResponse.description))
-        {
-            $taskNotesValue = $taskDetailsResponse.description.Replace('“', '"').Replace('”', '"')
+            #region Categories
+            $categoriesValue = @()
+            if ($null -ne $taskResponse.appliedCategories)
+            {
+                $allCategories = $taskResponse.appliedCategories | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
+                foreach ($category in $allCategories)
+                {
+                    $categoriesValue += $this.GetTaskColorNameByCategory($category.Name)
+                }
+            }
+            #endregion
+
+            #region Checklist
+            $checklistValue = @()
+            if ($null -ne $taskDetailsResponse.checklist)
+            {
+                $allCheckListItems = $taskDetailsResponse.checklist | gm | Where-Object -FilterScript{$_.MemberType -eq 'NoteProperty'}
+                foreach ($checkListItem in $allCheckListItems)
+                {
+                    $hashEntry = @{
+                        Title     = $taskDetailsResponse.checklist.($checkListItem.Name).title
+                        Completed = [bool]$taskDetailsResponse.checklist.($checkListItem.Name).isChecked
+                    }
+                    $checklistValue += $hashEntry
+                }
+            }
+            #endregion
+
+            $taskNotesValue = $null
+            if (-not [System.String]::IsNullOrEmpty($taskDetailsResponse.description))
+            {
+                $taskNotesValue = $taskDetailsResponse.description.Replace('“', '"').Replace('”', '"')
+            }
+            $this.Etag                 = $taskResponse.'@odata.etag'
+            $this.TaskId               = $taskResponse.id
+            $this.Title                = $taskResponse.title
+            $this.StartDateTime        = $taskResponse.startDateTime
+            $this.ConversationThreadId = $taskResponse.conversationThreadId
+            $this.DueDateTime          = $taskResponse.dueDateTime
+            $this.CompletedDateTime    = $taskResponse.completedDateTime
+            $this.Priority             = $taskResponse.priority
+            $this.Notes                = $taskNotesValue
+            $this.Assignments          = $assignmentsValue
+            $this.Attachments          = $attachmentsValue
+            $this.Categories           = $categoriesValue
+            $this.Checklist            = $checklistValue
         }
-        $this.Etag                 = $taskResponse.'@odata.etag'
-        $this.TaskId               = $taskResponse.id
-        $this.Title                = $taskResponse.title
-        $this.StartDateTime        = $taskResponse.startDateTime
-        $this.ConversationThreadId = $taskResponse.conversationThreadId
-        $this.DueDateTime          = $taskResponse.dueDateTime
-        $this.CompletedDateTime    = $taskResponse.completedDateTime
-        $this.Priority             = $taskResponse.priority
-        $this.Notes                = $taskNotesValue
-        $this.Assignments          = $assignmentsValue
-        $this.Attachments          = $attachmentsValue
-        $this.Categories           = $categoriesValue
-        $this.Checklist            = $checklistValue
     }
     [string]ConvertToJSONTask()
     {
@@ -276,7 +284,7 @@ class PlannerTaskObject
             -Body $body
         $this.TaskId = $taskResponse.id
         Write-Verbose -Message "New Planner Task created with Id {$($taskResponse.id)}"
-        $this.UpdateDetails($GlobalAdminAccount)
+        $this.UpdateDetails($GlobalAdminAccount, $ApplicationId)
     }
 
     [void]Update([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId)

@@ -165,7 +165,7 @@ function Set-TargetResource
     if ($Ensure -eq 'Present' -and $currentValues.Ensure -eq 'Absent')
     {
         Write-Verbose -Message "Planner Plan {$Title} doesn't already exist. Creating it."
-        New-M365DSCPlannerPlan -GroupId $GroupId `
+        New-M365DSCPlannerPlan -GroupId $OwnerGroup `
             -Title $Title `
             -ApplicationId $ApplicationId `
             -GlobalAdminAccount $GlobalAdminAccount | Out-Null
