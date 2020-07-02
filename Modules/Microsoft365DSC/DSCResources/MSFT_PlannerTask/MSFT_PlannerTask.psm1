@@ -523,7 +523,15 @@ function Export-TargetResource
 
         [Parameter()]
         [System.String]
-        $ApplicationId
+        $ApplicationId,
+
+        [Parameter()]
+        [System.Int32]
+        $Start,
+
+        [Parameter()]
+        [System.Int32]
+        $End
     )
     $InformationPreference = 'Continue'
 
@@ -538,12 +546,19 @@ function Export-TargetResource
         -InboundParameters $PSBoundParameters
 
     [array]$groups = Get-AzureADGroup -All:$true
-
-    $i = 1
+    $BucketModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\MSFT_PlannerBucket\MSFT_PlannerBucket.psm1' #Custom
+    $TaskModulePath = Join-Path $PSScriptRoot -ChildPath 'MSFT_PlannerTask.psm1' #Custom
+    $PlanModulePath = Join-Path $PSScriptRoot -ChildPath '..\MSFT_PlannerPlan\MSFT_PlannerPlan.psm1' #Custom
     $content = ''
-    foreach ($group in $groups)
+    for ($i = $Start; $i -le $groups.Length -and $i -le $end; $i++)
     {
-        Write-Information "    [$i/$($groups.Length)] $($group.DisplayName) - {$($group.ObjectID)}"
+        $group = $groups[$i-1]
+        $Total = $end
+        if ($end -gt $groups.Length)
+        {
+            $total = $groups.Length
+        }
+        Write-Information "    (GROUP)[$i/$($total)] $($group.DisplayName) - {$($group.ObjectID)}"
         try
         {
             [Array]$plans = Get-M365DSCPlannerPlansFromGroup -GroupId $group.ObjectId `
@@ -553,15 +568,66 @@ function Export-TargetResource
             $j = 1
             foreach ($plan in $plans)
             {
-                Write-Information "        [$j/$($plans.Length)] $($plan.Title)"
+                Write-Information "        (PLAN)[$j/$($plans.Length)] $($plan.Title)"
 
                 [Array]$tasks = Get-M365DSCPlannerTasksFromPlan -PlanId $plan.Id `
                                     -GlobalAdminAccount $GlobalAdminAccount `
                                     -ApplicationId $ApplicationId
+
+                #region PlannerPlan
+                $params = @{
+                    Title              = $plan.Title
+                    OwnerGroup         = $group.ObjectId
+                    ApplicationId      = $ApplicationId
+                    GlobalAdminAccount = $GlobalAdminAccount
+                }
+                Import-Module $PlanModulePath -Force | Out-Null
+                $result = Get-TargetResource @params
+                $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
+                $content += "        PlannerPlan " + (New-GUID).ToString() + "`r`n"
+                $content += "        {`r`n"
+                $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                        -ParameterName "GlobalAdminAccount"
+                $content += $currentDSCBlock
+                $content += "        }`r`n"
+                #endregion
+
+                #region Bucket
+                $buckets = Get-M365DSCPlannerBucketsFromPlan -PlanName $plan.Title `
+                               -GroupId $group.ObjectId `
+                               -PlanId $plan.Id `
+                               -ApplicationId $ApplicationId `
+                               -GlobalAdminAccount $GlobalAdminAccount
+                $b = 1
+                foreach ($bucket in $buckets)
+                {
+                    Write-Information "            (BUCKET)[$b/$($buckets.Length)] $($bucket.Name)"
+                    $params = @{
+                        Name               = $bucket.Name
+                        PlanName           = $plan.Title
+                        GroupId            = $Group.ObjectId
+                        ApplicationId      = $ApplicationId
+                        GlobalAdminAccount = $GlobalAdminAccount
+                    }
+                    Import-Module $BucketModulePath -Force | Out-Null
+                    $result = Get-TargetResource @params
+                    $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
+                    $content += "        PlannerBucket " + (New-GUID).ToString() + "`r`n"
+                    $content += "        {`r`n"
+                    $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
+                    $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                        -ParameterName "GlobalAdminAccount"
+                    $content += $currentDSCBlock
+                    $content += "        }`r`n"
+                    $b++
+                }
+                #endregion
                 $k = 1
                 foreach ($task in $tasks)
                 {
-                    Write-Information "            [$k/$($tasks.Length)] $($task.Title)"
+                    Import-Module $TaskModulePath -Force | Out-Null
+                    Write-Information "            (TASK)[$k/$($tasks.Length)] $($task.Title)"
                     $params = @{
                         GroupId            = $group.ObjectId
                         PlanName           = $plan.Title
@@ -601,10 +667,6 @@ function Export-TargetResource
                         $result.Remove("Checklist") | Out-Null
                     }
 
-                    # Fix Notes which can have multiple lines
-                    $result.Notes = $result.Notes.Replace('"', '``"')
-                    $result.Notes = $result.Notes.Replace("&", "``&")
-
                     $content += "        PlannerTask " + (New-GUID).ToString() + "`r`n"
                     $content += "        {`r`n"
                     $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
@@ -628,7 +690,6 @@ function Export-TargetResource
                 }
                 $j++
             }
-            $i++
         }
         catch
         {
@@ -792,6 +853,48 @@ function Get-M365DSCPlannerBucketNameByTaskId
     return $bucketName
 }
 
+function Get-M365DSCPlannerBucketsFromPlan
+{
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable[]])]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $GlobalAdminAccount,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ApplicationId
+    )
+    $results = @()
+    $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/buckets"
+    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+        -ApplicationId $ApplicationId `
+        -Uri $uri `
+        -Method Get
+    foreach ($bucket in $taskResponse.value)
+    {
+        $results += @{
+            Name     = $bucket.name
+            PlanName = $PlanName
+            GroupId  = $GroupId
+        }
+    }
+    return $results
+}
+
 function Get-M365DSCPlannerPlanIdByName
 {
     [CmdletBinding()]
@@ -863,4 +966,4 @@ function Get-M365DSCPlannerTasksFromPlan
     return $results
 }
 
-Export-ModuleMember -Function *-TargetResource
+Export-ModuleMember -Function *

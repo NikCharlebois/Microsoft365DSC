@@ -67,7 +67,15 @@ function Start-M365DSCConfigurationExtract
 
         [Parameter()]
         [System.String]
-        $CertificatePath
+        $CertificatePath,
+
+        [Parameter()]
+        [System.Int32]
+        $Start,
+
+        [Parameter()]
+        [System.Int32]
+        $End
     )
 
     $InformationPreference = "Continue"
@@ -282,6 +290,16 @@ function Start-M365DSCConfigurationExtract
                     if ($AppIdExists -and -not [System.String]::IsNullOrEmpty($ApplicationId))
                     {
                         $parameters.Add("ApplicationId", $ApplicationId)
+                    }
+
+                    if ($Start)
+                    {
+                        $parameters.Add("Start", $Start)
+                    }
+
+                    if ($End)
+                    {
+                        $parameters.Add("End", $End)
                     }
 
                     $exportString = ""

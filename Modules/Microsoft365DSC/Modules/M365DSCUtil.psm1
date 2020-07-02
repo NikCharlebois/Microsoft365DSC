@@ -834,7 +834,15 @@ function Export-M365DSCConfiguration
 
         [Parameter()]
         [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount
+        $GlobalAdminAccount,
+
+        [Parameter()]
+        [System.Int32]
+        $Start,
+
+        [Parameter()]
+        [System.Int32]
+        $End
     )
     $InformationPreference = 'SilentlyContinue'
     $WarningPreference = 'SilentlyContinue'
@@ -889,7 +897,7 @@ function Export-M365DSCConfiguration
                 -ApplicationSecret $ApplicationSecret `
                 -CertificateThumbprint $CertificateThumbprint `
                 -GenerateInfo $GenerateInfo `
-                -Quiet
+                -Quiet -Start $Start -End $End
         }
         elseif ($null -ne $Mode)
         {

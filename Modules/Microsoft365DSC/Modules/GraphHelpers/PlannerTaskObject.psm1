@@ -128,6 +128,12 @@ class PlannerTaskObject
             }
         }
         #endregion
+
+        $taskNotesValue = $null
+        if (-not [System.String]::IsNullOrEmpty($taskDetailsResponse.description))
+        {
+            $taskNotesValue = $taskDetailsResponse.description.Replace('ì', '"').Replace('î', '"')
+        }
         $this.Etag                 = $taskResponse.'@odata.etag'
         $this.TaskId               = $taskResponse.id
         $this.Title                = $taskResponse.title
@@ -136,7 +142,7 @@ class PlannerTaskObject
         $this.DueDateTime          = $taskResponse.dueDateTime
         $this.CompletedDateTime    = $taskResponse.completedDateTime
         $this.Priority             = $taskResponse.priority
-        $this.Notes                = $taskDetailsResponse.description.Replace('"', '`"').Replace('‚Äú', '`"').Replace('‚Äù', '`"')
+        $this.Notes                = $taskNotesValue
         $this.Assignments          = $assignmentsValue
         $this.Attachments          = $attachmentsValue
         $this.Categories           = $categoriesValue
