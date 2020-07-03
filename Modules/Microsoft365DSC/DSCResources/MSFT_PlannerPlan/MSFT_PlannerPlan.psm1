@@ -12,6 +12,10 @@ function Get-TargetResource
         [System.String]
         $OwnerGroup,
 
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
+
         [Parameter()]
         [System.String]
         [ValidateSet("Present", "Absent")]
@@ -66,15 +70,18 @@ function Get-TargetResource
         try
         {
             Write-Verbose -Message "Scanning Group {$($group.DisplayName)} for plan {$Title}"
-            [array]$plan = Get-M365DSCPlannerPlansFromGroup -GroupId $group.ObjectId `
-                        -ApplicationID $ApplicationId `
-                        -GlobalAdminAccount $GlobalAdminAccount | Where-Object -FilterScript {$_.Title -eq $Title}
-
-            if ($plan.Length -gt 1)
+            if ([System.String]::IsNullOrEmpty($PlanId))
             {
-                throw "Multiple project plans with name {$Title} were found for group {$OwnerGroup}"
+                [array]$plan = Get-M365DSCPlannerPlansFromGroup -GroupId $group.ObjectId `
+                            -ApplicationID $ApplicationId `
+                            -GlobalAdminAccount $GlobalAdminAccount | Where-Object -FilterScript {$_.Title -eq $Title}
             }
-
+            else
+            {
+                [array]$plan = Get-M365DSCPlannerPlansFromGroup -GroupId $group.ObjectId `
+                            -ApplicationID $ApplicationId `
+                            -GlobalAdminAccount $GlobalAdminAccount | Where-Object -FilterScript {$_.Id -eq $PlanId}
+            }
             if ($null -ne $plan)
             {
                 Write-Verbose -Message "Found Plan."
@@ -103,6 +110,7 @@ function Get-TargetResource
         Write-Verbose -Message "Plan not found, returning Ensure = Absent"
         $results = @{
             Title                 = $Title
+            PlanId                = $PlanId
             OwnerGroup            = $OwnerGroup
             Ensure                = 'Absent'
             CertificateThumbprint = $CertificateThumbprint
@@ -115,6 +123,7 @@ function Get-TargetResource
         Write-Verbose -Message "Plan found, returning Ensure = Present"
         $results = @{
             Title              = $plan.Title
+            PlanId             = $plan.Id
             OwnerGroup         = $OwnerGroupValue
             Ensure             = 'Present'
             GlobalAdminAccount = $GlobalAdminAccount
@@ -137,6 +146,10 @@ function Set-TargetResource
         [Parameter(Mandatory = $true)]
         [System.String]
         $OwnerGroup,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
 
         [Parameter()]
         [System.String]
@@ -205,6 +218,10 @@ function Test-TargetResource
         [Parameter(Mandatory = $true)]
         [System.String]
         $OwnerGroup,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
 
         [Parameter()]
         [System.String]
@@ -283,6 +300,7 @@ function Export-TargetResource
             {
                 $params = @{
                     Title              = $plan.Title
+                    PlanId             = $plan.Id
                     OwnerGroup         = $group.ObjectId
                     ApplicationId      = $ApplicationId
                     GlobalAdminAccount = $GlobalAdminAccount

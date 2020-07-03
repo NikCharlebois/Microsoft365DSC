@@ -50,7 +50,6 @@ class PlannerTaskObject
 
     [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskName, [string]$PlanId)
     {
-        $VerbosePreference = "Continue"
         Write-Verbose -Message "Trying to get the Task ID"
         $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
         $TasksInPlanResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
@@ -143,7 +142,7 @@ class PlannerTaskObject
             }
             $this.Etag                 = $taskResponse.'@odata.etag'
             $this.TaskId               = $taskResponse.id
-            $this.Title                = $taskResponse.title
+            $this.Title                = $taskResponse.title.Replace('“', '"').Replace('”', '"')
             $this.StartDateTime        = $taskResponse.startDateTime
             $this.ConversationThreadId = $taskResponse.conversationThreadId
             $this.DueDateTime          = $taskResponse.dueDateTime

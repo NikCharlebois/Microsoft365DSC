@@ -147,8 +147,15 @@ function Get-TargetResource
             $assignedValues = @()
             foreach ($assignee in $task.Assignments)
             {
-                $user = Get-AzureADUser -ObjectId $assignee
-                $assignedValues += $user.UserPrincipalName
+                try
+                {
+                    $user = Get-AzureADUser -ObjectId $assignee
+                    $assignedValues += $user.UserPrincipalName
+                }
+                catch
+                {
+                    Write-Verbose -MEssage $_
+                }
             }
         }
         #endregion
@@ -325,10 +332,17 @@ function Set-TargetResource
         $AssignmentsValue = @()
         foreach ($userName in $AssignedUsers)
         {
-            $user = Get-AzureADUser -SearchString $userName
-            if ($null -ne $user)
+            try
             {
-                $AssignmentsValue += $user.ObjectId
+                $user = Get-AzureADUser -SearchString $userName -ErrorAction SilentlyContinue
+                if ($null -ne $user)
+                {
+                    $AssignmentsValue += $user.ObjectId
+                }
+            }
+            catch
+            {
+                Write-Verbose -Message "Couldn't get user {$UserName}"
             }
         }
         $task.Assignments = $AssignmentsValue
@@ -593,6 +607,7 @@ function Export-TargetResource
                 #region PlannerPlan
                 $params = @{
                     Title              = $plan.Title
+                    PlanId             = $plan.Id
                     OwnerGroup         = $group.ObjectId
                     ApplicationId      = $ApplicationId
                     GlobalAdminAccount = $GlobalAdminAccount
@@ -621,6 +636,8 @@ function Export-TargetResource
                     Write-Information "            (BUCKET)[$b/$($buckets.Length)] $($bucket.Name)"
                     $params = @{
                         Name               = $bucket.Name
+                        PlanId             = $plan.Id
+                        BucketId           = $bucket.Id
                         PlanName           = $plan.Title
                         GroupId            = $Group.ObjectId
                         ApplicationId      = $ApplicationId
@@ -690,15 +707,29 @@ function Export-TargetResource
                         -ParameterName "GlobalAdminAccount"
                     if ($result.Attachments.Length -gt 0)
                     {
-                        $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
-                            -ParameterName "Attachments" `
-                            -IsCIMArray $true
+                        try
+                        {
+                            $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                                -ParameterName "Attachments" `
+                                -IsCIMArray $true
+                        }
+                        catch
+                        {
+                            Write-Verbose -Message $_
+                        }
                     }
                     if ($result.Checklist.Length -gt 0)
                     {
-                        $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
-                            -ParameterName "Checklist" `
-                            -IsCIMArray $true
+                        try
+                        {
+                            $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                                -ParameterName "Checklist" `
+                                -IsCIMArray $true
+                        }
+                        catch
+                        {
+                            Write-Verbose -Message $_
+                        }
                     }
                     $content += $currentDSCBlock
                     $content += "        }`r`n"

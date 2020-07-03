@@ -10,7 +10,15 @@ function Get-TargetResource
 
         [Parameter(Mandatory = $true)]
         [System.String]
+        $BucketId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
         $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
 
         [Parameter()]
         [System.String]
@@ -41,13 +49,9 @@ function Get-TargetResource
     [array]$plans = Get-M365DSCPlannerPlansFromGroup -GroupId $GroupId `
                         -ApplicationID $ApplicationId `
                         -GlobalAdminAccount $GlobalAdminAccount
-    [array]$plan = $plans | Where-Object -FilterScript {$_.Title -eq $PlanName}
+    [array]$plan = $plans | Where-Object -FilterScript {$_.Id -eq $PlanId}
 
-    if ($plan.Length -gt 1)
-    {
-        throw "Multiple plans with name {$GroupName} were found for Group {$GroupId}"
-    }
-    elseif ($plan.Length -eq 1)
+    if ($plan.Length -eq 1)
     {
         Write-Verbose -Message "Found Plan {$PlanName} with Id {$($plan.Id)}"
     }
@@ -61,7 +65,7 @@ function Get-TargetResource
                           -ApplicationId $ApplicationId `
                           -PlanId $plan.Id `
                           -GlobalAdminAccount $GlobalAdminAccount
-    [Array]$bucket = $buckets | Where-Object -FilterScript {$_.Name -eq $Name}
+    [Array]$bucket = $buckets | Where-Object -FilterScript {$_.Id -eq $BucketId}
     if ($bucket.Length -gt 1)
     {
         throw "Multiple Buckets with Name {$Name} were found for Plan with ID {$($plan.Id)}." + `
@@ -73,6 +77,8 @@ function Get-TargetResource
         $results = @{
             Name               = $Name
             PlanName           = $PlanName
+            PlanId             = $PlanId
+            BucketId           = $bucket.Id
             GroupId            = $GroupId
             Ensure             = "Absent"
             ApplicationId      = $ApplicationId
@@ -84,6 +90,8 @@ function Get-TargetResource
     $results = @{
         Name               = $Name
         PlanName           = $PlanName
+        PlanId             = $PlanId
+        BucketId           = $bucket.Id
         GroupId            = $GroupId
         Ensure             = "Present"
         ApplicationId      = $ApplicationId
@@ -104,7 +112,15 @@ function Set-TargetResource
 
         [Parameter(Mandatory = $true)]
         [System.String]
+        $BucketId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
         $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
 
         [Parameter()]
         [System.String]
@@ -139,12 +155,8 @@ function Set-TargetResource
         [array]$plans = Get-M365DSCPlannerPlansFromGroup -GroupId $GroupId `
                 -ApplicationID $ApplicationId `
                 -GlobalAdminAccount $GlobalAdminAccount
-        [array]$plan = $plans | Where-Object -FilterScript {$_.Title -eq $PlanName}
+        [array]$plan = $plans | Where-Object -FilterScript {$_.Id -eq $PlanId}
 
-        if ($plan.Length -gt 1)
-        {
-            throw "Multiple plans with name {$GroupName} were found for Group {$GroupId}"
-        }
         Write-Verbose -Message "Planner Bucket {$Name} doesn't already exist. Creating it."
         New-M365DSCPlannerBucket -Name $Name -PlanId $plan.Id `
             -ApplicationId $ApplicationId `
@@ -175,7 +187,15 @@ function Test-TargetResource
 
         [Parameter(Mandatory = $true)]
         [System.String]
+        $BucketId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
         $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
 
         [Parameter()]
         [System.String]
@@ -393,8 +413,9 @@ function Get-M365DSCPlannerBucketsFromPlan
     foreach ($bucket in $taskResponse.value)
     {
         $results += @{
-            Name     = $bucket.name
+            Name     = $bucket.name.Replace('“', '"').Replace('”', '"')
             PlanName = $PlanName
+            Id       = $bucket.id
             GroupId  = $GroupId
         }
     }
