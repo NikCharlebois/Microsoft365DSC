@@ -6,6 +6,10 @@ function Get-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
+        $TaskId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
         $PlanName,
 
         [Parameter(Mandatory = $true)]
@@ -106,13 +110,7 @@ function Get-TargetResource
         . $usingScript
     }
     $task = [PlannerTaskObject]::new()
-    Write-Verbose -Message "Populating task {$Title} from the Get method"
-    $PlanId = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName `
-                  -GroupId $GroupId `
-                  -ApplicationId $ApplicationId `
-                  -GlobalAdminAccount $GlobalAdminAccount
-    Write-Verbose -Message "Found Plan ID {$PlanId} from the Get method"
-    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $Title, $PlanId)
+    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskId)
 
     if ([System.String]::IsNullOrEmpty($task.Title))
     {
@@ -133,7 +131,7 @@ function Get-TargetResource
         if (-not [System.String]::IsNullOrEmpty($BucketName))
         {
             $BucketNameValue = Get-M365DSCPlannerBucketNameByTaskId -ApplicationId $ApplicationId `
-                    -TaskId $PlanId `
+                    -TaskId $TaskId `
                     -GlobalAdminAccount $GlobalAdminAccount
         }
         #endregion
@@ -179,6 +177,7 @@ function Get-TargetResource
             $DueDateTimeValue = $task.DueDateTime
         }
         $results = @{
+            TaskId                = $task.TaskId
             GroupId               = $GroupId
             PlanName              = $PlanNameValue
             Title                 = $Title
@@ -209,6 +208,10 @@ function Set-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
+        $TaskId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
         $PlanName,
 
         [Parameter(Mandatory = $true)]
@@ -234,10 +237,6 @@ function Set-TargetResource
         [Parameter()]
         [System.String]
         $Bucket,
-
-        [Parameter()]
-        [System.String]
-        $TaskId,
 
         [Parameter()]
         [System.String]
@@ -432,6 +431,10 @@ function Test-TargetResource
     [OutputType([System.Boolean])]
     param
     (
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $TaskId,
+
         [Parameter(Mandatory = $true)]
         [System.String]
         $PlanName,
@@ -662,6 +665,7 @@ function Export-TargetResource
                     Import-Module $TaskModulePath -Force | Out-Null
                     Write-Information "            (TASK)[$k/$($tasks.Length)] $($task.Title)"
                     $params = @{
+                        TaskId             = $task.TaskId
                         GroupId            = $group.ObjectId
                         PlanName           = $plan.Title
                         Title              = $task.Title
@@ -1008,7 +1012,7 @@ function Get-M365DSCPlannerTasksFromPlan
     {
         $results += @{
             Title = $task.title
-            Id    = $task.id
+            TaskId    = $task.id
         }
     }
     return $results

@@ -48,27 +48,12 @@ class PlannerTaskObject
         return $null
     }
 
-    [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskName, [string]$PlanId)
+    [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskId)
     {
-        Write-Verbose -Message "Trying to get the Task ID"
-        $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
-        $TasksInPlanResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-            -ApplicationId $ApplicationId `
-            -Uri $uri `
-            -Method Get
-        $TaskIdValue = $null
-        foreach ($task in $TasksInPlanResponse.Value)
+        if (-not [System.String]::IsNullOrEmpty($TaskId))
         {
-            if ($task.title -eq $TaskName)
-            {
-                $TaskIdValue = $task.id
-                break
-            }
-        }
-        if (-not [System.String]::IsNullOrEmpty($TaskIdValue))
-        {
-            Write-Verbose -Message "Found TaskIdValue {$TaskIdValue}"
-            $uri = "https://graph.microsoft.com/beta/planner/tasks/$TaskIdValue"
+            Write-Verbose -Message "Found {$TaskId}"
+            $uri = "https://graph.microsoft.com/beta/planner/tasks/$TaskId"
             $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
                 -ApplicationId $ApplicationId `
                 -Uri $uri `
@@ -138,11 +123,11 @@ class PlannerTaskObject
             $taskNotesValue = $null
             if (-not [System.String]::IsNullOrEmpty($taskDetailsResponse.description))
             {
-                $taskNotesValue = $taskDetailsResponse.description.Replace('“', '"').Replace('”', '"')
+                $taskNotesValue = $taskDetailsResponse.description.Replace('?', '"').Replace('?', '"')
             }
             $this.Etag                 = $taskResponse.'@odata.etag'
             $this.TaskId               = $taskResponse.id
-            $this.Title                = $taskResponse.title.Replace('“', '"').Replace('”', '"')
+            $this.Title                = $taskResponse.title.Replace('?', '"').Replace('?', '"')
             $this.StartDateTime        = $taskResponse.startDateTime
             $this.ConversationThreadId = $taskResponse.conversationThreadId
             $this.DueDateTime          = $taskResponse.dueDateTime

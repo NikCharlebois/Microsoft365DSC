@@ -14,6 +14,7 @@ class MSFT_PlannerTaskChecklistItem
 [ClassVersion("1.0.0.0"), FriendlyName("PlannerTask")]
 class MSFT_PlannerTask : OMI_BaseResource
 {
+    [Key, Description("Id of the Group associated with the Task.")] string TaskId;
     [Key, Description("Id of the Group associated with the Task.")] string GroupId;
     [Key, Description("Id of the Planner Plan which contains the Task.")] string PlanName;
     [Key, Description("The Title of the Planner Task.")] string Title;
