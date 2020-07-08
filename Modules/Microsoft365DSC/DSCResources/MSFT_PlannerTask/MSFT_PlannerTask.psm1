@@ -578,7 +578,7 @@ function Export-TargetResource
     $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' `
         -InboundParameters $PSBoundParameters
 
-    [array]$groups = Get-AzureADGroup -All:$true
+    [array]$groups = Get-AzureADGroup -All:$true | Where-Object -FilterScript {$_.OnPremisesSyncEnabled -ne $True}
     $BucketModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\MSFT_PlannerBucket\MSFT_PlannerBucket.psm1' #Custom
     $TaskModulePath = Join-Path $PSScriptRoot -ChildPath 'MSFT_PlannerTask.psm1' #Custom
     $PlanModulePath = Join-Path $PSScriptRoot -ChildPath '..\MSFT_PlannerPlan\MSFT_PlannerPlan.psm1' #Custom
