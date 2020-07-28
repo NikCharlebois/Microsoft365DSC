@@ -5,6 +5,8 @@
 * AADApplication
   * Removed the ObjectId parameter from the list of parameters
     checked in the Test-TargetResource;
+* TeamsAppSetupPolicy
+  * Initial Release;
 
 ## 1.20.723.1
 
