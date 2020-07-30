@@ -135,6 +135,7 @@
                           'Export-M365DSCConfiguration',
                           'New-M365DSCDeltaReport',
                           'New-M365DSCReportFromConfiguration',
+                          'New-M365DSCVulnerabilityReport',
                           'Set-M365DSCAgentCertificateConfiguration',
                           'Test-M365DSCAgent',
                           'Test-M365DSCDependenciesForNewVersions')

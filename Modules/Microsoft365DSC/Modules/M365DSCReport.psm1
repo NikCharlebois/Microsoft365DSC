@@ -253,8 +253,8 @@ function Compare-M365DSCConfigurations
     }
 
     [Array] $Delta = @()
-    [Array] $SourceObject  = ConvertTo-DSCObject -Path $Source
-    [Array] $DestinationObject  = ConvertTo-DSCObject -Path $Destination
+    [Array] $SourceObject  = ConvertTo-DSCObject -Path $Source -IncludeComments $true
+    [Array] $DestinationObject  = ConvertTo-DSCObject -Path $Destination -IncludeComments $true
 
     # Loop through all items in the source array
     $i = 1
@@ -280,6 +280,10 @@ function Compare-M365DSCConfigurations
                     ValueInSource      = 'Present'
                     ValueInDestination = 'Absent'
                 })
+            }
+            if ($null -ne $sourceResource.("_metadata_$($key[0])"))
+            {
+                $drift.Add("Metadata", $sourceResource.("_metadata_$($key[0])"))
             }
             $Delta += ,$drift
             $drift = $null
@@ -316,6 +320,10 @@ function Compare-M365DSCConfigurations
                                 ValueInSource      = $sourceResource.$propertyName
                                 ValueInDestination = $destinationResource.$propertyName
                         }
+                        if ($null -ne $destinationResource.("_metadata_$propertyName"))
+                        {
+                            $drift.Properties.Add("Metadata", $destinationResource.("_metadata_$propertyName"))
+                        }
                     }
                 }
             }
@@ -345,6 +353,11 @@ function Compare-M365DSCConfigurations
                                 ParameterName      = $propertyName
                                 ValueInSource      = $null
                                 ValueInDestination = $destinationResource.$propertyName
+                        }
+
+                        if ($null -ne $destinationResource.("_metadata_$propertyName"))
+                        {
+                            $drift.Properties.Add("Metadata", $destinationResource.("_metadata_$propertyName"))
                         }
                     }
                 }
@@ -496,7 +509,7 @@ function New-M365DSCDeltaReport
 
     [array]$resourcesMissingInSource = $Delta | Where-Object -FilterScript {$_.Properties.ParameterName -eq 'Ensure' -and `
                                     $_.Properties.ValueInSource -eq 'Absent'}
-                                    [array]$resourcesMissingInDestination = $Delta | Where-Object -FilterScript {$_.Properties.ParameterName -eq 'Ensure' -and `
+    [array]$resourcesMissingInDestination = $Delta | Where-Object -FilterScript {$_.Properties.ParameterName -eq 'Ensure' -and `
                                     $_.Properties.ValueInDestination -eq 'Absent'}
     [array]$resourcesInDrift = $Delta | Where-Object -FilterScript {$_.Properties.ParameterName -ne 'Ensure'}
 
@@ -541,6 +554,7 @@ function New-M365DSCDeltaReport
             [void]$reportSB.AppendLine("<img src='$iconPath' />")
             [void]$reportSB.AppendLine("</th>");
             [void]$reportSB.AppendLine("<th style='border:1px solid black;text-align:center;'>")
+
             [void]$reportSB.AppendLine("<h3>$($resource.ResourceName) - $($resource.Key) = $($resource.KeyValue)</h3>")
             [void]$reportSB.AppendLine("</th>")
             [void]$reportSB.AppendLine("</tr>")
@@ -607,4 +621,73 @@ function New-M365DSCDeltaReport
     [void]$reportSB.AppendLine("</body></html>")
     $reportSB.ToString() | Out-File $OutputPath
     Invoke-Item $OutputPath
+}
+
+function New-M365DSCVulnerabilityReport
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $Source,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $Destination,
+
+        [Parameter(Mandatory=$true)]
+        [System.String]
+        $OutputPath,
+
+        [Parameter()]
+        [System.Management.Automation.PSCredential]
+        $EmailCredential,
+
+        [Parameter()]
+        [System.String[]]
+        $EmailTo
+    )
+
+    #region Telemetry
+    $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+    $data.Add("Event", "VulnerabilityReport")
+    Add-M365DSCTelemetryEvent -Data $data
+    #endregion
+    $Delta = Compare-M365DSCConfigurations -Source $Source -Destination $Destination -CaptureTelemetry $false
+
+    <#[array]$resourcesMissingInSource = $Delta | Where-Object -FilterScript {$_.Properties.ParameterName -eq 'Ensure' -and `
+                                    $_.Properties.ValueInSource -eq 'Absent'}
+    [array]$resourcesMissingInDestination = $Delta | Where-Object -FilterScript {$_.Properties.ParameterName -eq 'Ensure' -and `
+                                    $_.Properties.ValueInDestination -eq 'Absent'}
+    #>
+    [array]$resourcesInDrift = $Delta | Where-Object -FilterScript {$_.Properties.ParameterName -ne 'Ensure'}
+
+    $totalLevel1 = 0
+    foreach ($drift in $resourcesInDrift)
+    {
+        foreach ($driftedParam in $drift.Properties)
+        {
+            if ($driftedParam.ParameterName.StartsWith("_metadata_") -and $driftedParam.ValueInDestination.StartsWith("### L1|"))
+            {
+                $actualParam = $drift.Properties | Where-Object -FilterScript {$_.ParameterName -eq $($driftedParam.ParameterName.Replace("_metadata_", ""))}
+                if ($null -ne $actualParam)
+                {
+                    $totalLevel1++
+                    $executiveSummary += "<h2><div style='color:Orange'>[$($drift.ResourceName)]</div>$($actualParam.ParameterName)</h2>"
+                    $executiveSummary += "<strong>Value in your Tenant:</strong> $($actualParam.ValueInSource)<br />"
+                    $executiveSummary += "<strong>Recommended value:</strong> $($actualParam.ValueInDestination)<br />"
+                    $executiveSummary += "<strong>Additional Information:</strong> $($driftedParam.ValueInDestination.Split('|')[1])<br /><br />"
+                }
+            }
+        }
+    }
+    $executiveSummary = "<div style='background-color:red'>($($totalLevel1)) Vulnerabilities Found</div>" + $executiveSummary
+    Send-MailMessage -To $EmailTo `
+        -Subject "Microsoft365DSC Vulnerabilities Detected" `
+        -BodyAsHtml $executiveSummary `
+        -From "M365DSCVulnerabilityReport@outlook.com" `
+        -SMTPServer 'smtp-mail.outlook.com' `
+        -Port 587 `
+        -UseSSL `
+        -Credential $EmailCredential
 }
