@@ -13,18 +13,20 @@ function Get-TargetResource
         $Description,
 
         [Parameter()]
-        [System.String]
-        [ValidatePattern("^(?:\+)?[0-9]*$")]
-        $NotificationDialOutNumber,
+        [System.String[]]
+        $AppPresetList,
 
         [Parameter()]
-        [System.String]
-        $NotificationGroup,
+        [System.String[]]
+        $PinnedAppBarApps,
 
         [Parameter()]
-        [System.String]
-        [ValidateSet("NotificationOnly","ConferenceMuted","ConferenceUnMuted")]
-        $NotificationMode,
+        [System.Boolean]
+        $AllowSideLoading,
+
+        [Parameter()]
+        [System.Boolean]
+        $AllowUserPinning,
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
@@ -36,7 +38,7 @@ function Get-TargetResource
         $GlobalAdminAccount
     )
 
-    Write-Verbose -Message "Getting the Teams Emergency Calling Policy {$Identity}"
+    Write-Verbose -Message "Getting the Teams App Setup Policy {$Identity}"
 
     #region Telemetry
     $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
@@ -50,31 +52,28 @@ function Get-TargetResource
     $ConnectionMode = New-M365DSCConnection -Platform 'SkypeForBusiness' `
         -InboundParameters $PSBoundParameters
 
-    $policy = Get-CsTeamsEmergencyCallingPolicy -Identity $Identity -ErrorAction 'SilentlyContinue'
+    $policy = Get-CsTeamsAppSetupPolicy -Identity $Identity `
+        -ErrorAction 'SilentlyContinue'
 
     if ($null -eq $policy)
     {
-        Write-Verbose -Message "Could not find Teams Emergency Calling Policy {$Identity}"
+        Write-Verbose -Message "Could not find Teams App Setup Policy {$Identity}"
         return @{
             Identity           = $Identity
             Ensure             = 'Absent'
             GlobalAdminAccount = $GlobalAdminAccount
         }
     }
-    Write-Verbose -Message "Found Teams Emergency Calling Policy {$Identity}"
+    Write-Verbose -Message "Found Teams App Setup Policy {$Identity}"
     $result = @{
-        Identity                  = $Identity
-        Description               = $policy.Description
-        NotificationDialOutNumber = $policy.NotificationDialOutNumber
-        NotificationGroup         = $policy.NotificationGroup
-        NotificationMode          = $policy.NotificationMode
-        Ensure                    = "Present"
-        GlobalAdminAccount        = $GlobalAdminAccount
-    }
-
-    if ([System.String]::IsNullOrEmpty($result.NotificationMode))
-    {
-        $result.Remove("NotificationMode") | Out-Null
+        Identity           = $Identity
+        Description        = $policy.Description
+        AppPresetList      = [String[]]$policy.AppPresetList
+        PinnedAppBarApps   = [String[]]$policy.PinnedAppBarApps
+        AllowSideLoading   = $policy.AllowSideLoading
+        AllowUserPinning   = $policy.AllowUserPinning
+        Ensure             = "Present"
+        GlobalAdminAccount = $GlobalAdminAccount
     }
 
     return $result
@@ -94,18 +93,20 @@ function Set-TargetResource
         $Description,
 
         [Parameter()]
-        [System.String]
-        [ValidatePattern("^(?:\+)?[0-9]*$")]
-        $NotificationDialOutNumber,
+        [System.String[]]
+        $AppPresetList,
 
         [Parameter()]
-        [System.String]
-        $NotificationGroup,
+        [System.String[]]
+        $PinnedAppBarApps,
 
         [Parameter()]
-        [System.String]
-        [ValidateSet("NotificationOnly","ConferenceMuted","ConferenceUnMuted")]
-        $NotificationMode,
+        [System.Boolean]
+        $AllowSideLoading,
+
+        [Parameter()]
+        [System.Boolean]
+        $AllowUserPinning,
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
@@ -116,25 +117,7 @@ function Set-TargetResource
         [System.Management.Automation.PSCredential]
         $GlobalAdminAccount
     )
-
-    Write-Verbose -Message "Setting Teams Emergency Calling Policy {$Identity}"
-
-    # Check that at least one optional parameter is specified
-    $inputValues = @()
-    foreach ($item in $PSBoundParameters.Keys)
-    {
-        if (-not [System.String]::IsNullOrEmpty($PSBoundParameters.$item) -and $item -ne 'GlobalAdminAccount' `
-            -and $item -ne 'Identity' -and $item -ne 'Ensure')
-        {
-            $inputValues += $item
-        }
-    }
-
-    if ($inputValues.Count -eq 0)
-    {
-        throw "You need to specify at least one optional parameter for the Set-TargetResource function" + `
-            " of the [TeamsEmergencyCallingPolicy] instance {$Identity}"
-    }
+    Write-Verbose -Message "Setting Teams App Setup Policy {$Identity}"
 
     #region Telemetry
     $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
@@ -188,18 +171,20 @@ function Test-TargetResource
         $Description,
 
         [Parameter()]
-        [System.String]
-        [ValidatePattern("^(?:\+)?[0-9]*$")]
-        $NotificationDialOutNumber,
+        [System.String[]]
+        $AppPresetList,
 
         [Parameter()]
-        [System.String]
-        $NotificationGroup,
+        [System.String[]]
+        $PinnedAppBarApps,
 
         [Parameter()]
-        [System.String]
-        [ValidateSet("NotificationOnly","ConferenceMuted","ConferenceUnMuted")]
-        $NotificationMode,
+        [System.Boolean]
+        $AllowSideLoading,
+
+        [Parameter()]
+        [System.Boolean]
+        $AllowUserPinning,
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
@@ -211,7 +196,7 @@ function Test-TargetResource
         $GlobalAdminAccount
     )
 
-    Write-Verbose -Message "Testing configuration of Team Emergency Calling Policy {$Identity}"
+    Write-Verbose -Message "Testing configuration of Team App Setup Policy {$Identity}"
 
     $CurrentValues = Get-TargetResource @PSBoundParameters
 
@@ -253,16 +238,18 @@ function Export-TargetResource
     $ConnectionMode = New-M365DSCConnection -Platform 'SkypeForBusiness' `
         -InboundParameters $PSBoundParameters
 
-    $organization = ""
-    if ($GlobalAdminAccount.UserName.Contains("@"))
+    $i = 1
+    [array]$policies = Get-CsTeamsAppSetupPolicy
+    $dscContent = ''
+    if ($policies.Length -gt 0)
     {
-        $organization = $GlobalAdminAccount.UserName.Split("@")[1]
+        Write-Host "`r`n" -NoNewLine
+    }
+    else
+    {
+        Write-Host $Global:M365DSCEmojiGreenCheckMark
     }
 
-    $i = 1
-    [array]$policies = Get-CsTeamsEmergencyCallingPolicy
-    $content = ''
-    Write-Host "`r`n" -NoNewLine
     foreach ($policy in $policies)
     {
         Write-Host "    |---[$i/$($policies.Count)] $($policy.Identity)" -NoNewLine
@@ -270,22 +257,19 @@ function Export-TargetResource
             Identity           = $policy.Identity
             GlobalAdminAccount = $GlobalAdminAccount
         }
-        $result = Get-TargetResource @params
-        $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
-        $content += "        TeamsEmergencyCallingPolicy " + (New-GUID).ToString() + "`r`n"
-        $content += "        {`r`n"
-        $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
-        $partialContent = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"
-        if ($partialContent.ToLower().IndexOf($organization.ToLower()) -gt 0)
-        {
-            $partialContent = $partialContent -ireplace [regex]::Escape("@" + $organization), "@`$OrganizationName"
-        }
-        $content += $partialContent
-        $content += "        }`r`n"
+        $Results = Get-TargetResource @params
+        $Results.Identity = $Results.Identity.Replace("Tag:", "")
+        $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
+                        -Results $Results
+        $dscContent += Get-M365DSCExportContentForResource -ResourceName $ResourceName `
+                        -ConnectionMode $ConnectionMode `
+                        -ModulePath $PSScriptRoot `
+                        -Results $Results `
+                        -GlobalAdminAccount $GlobalAdminAccount
         $i++
         Write-Host $Global:M365DSCEmojiGreenCheckMark
     }
-    return $content
+    return $dscContent
 }
 
 Export-ModuleMember -Function *-TargetResource
