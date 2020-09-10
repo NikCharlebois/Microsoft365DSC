@@ -70,12 +70,9 @@ function Get-TargetResource
 
     Write-Verbose -Message "Getting configuration of AzureAD Group"
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -84,18 +81,7 @@ function Get-TargetResource
     if ($PSBoundParameters.ContainsKey("Id"))
     {
         Write-Verbose -Message "GroupID was specified"
-        try
-        {
-            $Group = Get-AzureADMSGroup -id $Id
-        }
-        catch
-        {
-            $Group = Get-AzureADMSGroup -Filter "DisplayName eq '$DisplayName'"
-            if ($Group.Length -gt 1)
-            {
-                throw "Duplicate AzureAD Groups named $DisplayName exist in tenant"
-            }
-        }
+        $Group = Get-AzureADMSGroup -id $Id
     }
     else
     {
@@ -138,7 +124,6 @@ function Get-TargetResource
         Write-Verbose -Message "Get-TargetResource Result: `n $(Convert-M365DscHashtableToString -Hashtable $result)"
         return $result
     }
-
 }
 
 function Set-TargetResource
@@ -212,12 +197,9 @@ function Set-TargetResource
 
     Write-Verbose -Message "Setting configuration of Azure AD Groups"
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -237,37 +219,16 @@ function Set-TargetResource
 
     if ($Ensure -eq 'Present' -and $currentGroup.Ensure -eq 'Present')
     {
-        try
-        {
-            Set-AzureADMSGroup @currentParameters
-        }
-        catch
-        {
-            New-M365DSCLogEntry -Error $_ -Message "Couldn't set group $DisplayName" -Source $MyInvocation.MyCommand.ModuleName
-        }
+        Set-AzureADMSGroup @currentParameters
     }
     elseif ($Ensure -eq 'Present' -and $currentGroup.Ensure -eq 'Absent')
     {
         $currentParameters.Remove("Id")
-        try
-        {
-            New-AzureADMSGroup @currentParameters
-        }
-        catch
-        {
-            New-M365DSCLogEntry -Error $_ -Message "Couldn't create group $DisplayName" -Source $MyInvocation.MyCommand.ModuleName
-        }
+        New-AzureADMSGroup @currentParameters
     }
     elseif ($Ensure -eq 'Absent' -and $currentGroup.Ensure -eq 'Present')
     {
-        try
-        {
-            Remove-AzureADMSGroup -Id $currentGroup.ID
-        }
-        catch
-        {
-            New-M365DSCLogEntry -Error $_ -Message "Couldn't delete group $DisplayName" -Source $MyInvocation.MyCommand.ModuleName
-        }
+        Remove-AzureADMSGroup -Id $currentGroup.ID
     }
 }
 
@@ -349,7 +310,6 @@ function Test-TargetResource
 
     $ValuesToCheck = $PSBoundParameters
     $ValuesToCheck.Remove('GlobalAdminAccount') | Out-Null
-    $ValuesToCheck.Remove('Id') | Out-Null
 
     $TestResult = Test-Microsoft365DSCParameterState -CurrentValues $CurrentValues `
         -Source $($MyInvocation.MyCommand.Source) `
@@ -383,45 +343,76 @@ function Export-TargetResource
         [System.String]
         $CertificateThumbprint
     )
+    $InformationPreference = 'Continue'
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
     $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' -InboundParameters $PSBoundParameters
 
-    [array] $groups = Get-AzureADMSGroup -All:$true
+    [array] $groups = Get-AzureADMSGroup
     $i = 1
-    $dscContent = ''
-    Write-Host "`r`n" -NoNewLine
+    $content = ''
     foreach ($group in $groups)
     {
-        Write-Host "    |---[$i/$($groups.Count)] $($group.DisplayName)" -NoNewLine
-        $Params = @{
-            GlobalAdminAccount    = $GlobalAdminAccount
-            DisplayName           = $group.DisplayName
-            Id                    = $group.Id
-            ApplicationId         = $ApplicationId
-            TenantId              = $TenantId
-            CertificateThumbprint = $CertificateThumbprint
+        Write-Information -MessageData "    [$i/$($groups.Count)] $($group.DisplayName)"
+        if ($ConnectionMode -eq 'Credential')
+        {
+            $params = @{
+                GlobalAdminAccount = $GlobalAdminAccount
+                DisplayName        = $group.DisplayName
+                Id                 = $group.Id
+            }
         }
-        $Results = Get-TargetResource @Params
-        $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
-            -Results $Results
-        $dscContent += Get-M365DSCExportContentForResource -ResourceName $ResourceName `
-            -ConnectionMode $ConnectionMode `
-            -ModulePath $PSScriptRoot `
-            -Results $Results `
-            -GlobalAdminAccount $GlobalAdminAccount
-        Write-Host $Global:M365DSCEmojiGreenCheckMark
+        else
+        {
+            $params = @{
+                ApplicationId         = $ApplicationId
+                TenantId              = $TenantId
+                CertificateThumbprint = $CertificateThumbprint
+                DisplayName           = $group.DisplayName
+                Id                    = $group.Id
+            }
+        }
+        $result = Get-TargetResource @params
+        if ($ConnectionMode -eq 'Credential')
+        {
+            $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
+            $result.Remove("ApplicationId") | Out-Null
+            $result.Remove("TenantId") | Out-Null
+            $result.Remove("CertificateThumbprint") | Out-Null
+        }
+        else
+        {
+            $result.Remove("GlobalAdminAccount") | Out-Null
+        }
+
+        if ($null -eq $result.MembershipRuleProcessingState)
+        {
+            $result.Remove('MembershipRuleProcessingState') | Out-Null
+        }
+        if ($null -eq $result.Visibility)
+        {
+            $result.Remove('Visibility') | Out-Null
+        }
+        $content += "        AADMSGroup " + (New-GUID).ToString() + "`r`n"
+        $content += "        {`r`n"
+        $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
+        if ($ConnectionMode -eq 'Credential')
+        {
+            $content += Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"
+        }
+        else
+        {
+            $content += $currentDSCBlock
+        }
+        $content += "        }`r`n"
         $i++
     }
-    return $dscContent
+    return $content
 }
 
 Export-ModuleMember -Function *-TargetResource

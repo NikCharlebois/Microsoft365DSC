@@ -61,12 +61,9 @@ function Get-TargetResource
     Write-Verbose -Message "Retrieve team GroupId: $($team.GroupId)"
 
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -146,12 +143,9 @@ function Set-TargetResource
     Write-Verbose -Message "Setting configuration of member $User to Team $TeamName"
 
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -278,13 +272,12 @@ function Export-TargetResource
         [System.String]
         $CertificateThumbprint
     )
+    $InformationPreference ='Continue'
+
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -451,13 +444,14 @@ function Export-TargetResource
         $i++
     }
 
-    Write-Host "    `r`nBroke extraction process down into {$MaxProcesses} jobs of {$($instances[0].Length)} item(s) each" -NoNewLine
+    Write-Information "    Broke extraction process down into {$MaxProcesses} jobs of {$($instances[0].Length)} item(s) each"
     $totalJobs = $MaxProcesses
     $jobsCompleted = 0
     $status = "Running..."
     $elapsedTime = 0
     do
     {
+        $InformationPreference = 'SilentlyContinue'
         $jobs = Get-Job | Where-Object -FilterScript { $_.Name -like '*TeamsUser*' }
         $count = $jobs.Length
         foreach ($job in $jobs)
@@ -478,20 +472,12 @@ function Export-TargetResource
 
             $status = "Completed $jobsCompleted/$totalJobs jobs in $elapsedTime seconds"
             $percentCompleted = $jobsCompleted / $totalJobs * 100
-            try
-            {
-                Write-Progress -Activity "TeamsUser Extraction" -PercentComplete $percentCompleted -Status $status
-            }
-            catch
-            {
-                Write-Verbose $_
-            }
+            Write-Progress -Activity "TeamsUser Extraction" -PercentComplete $percentCompleted -Status $status
         }
         $elapsedTime ++
         Start-Sleep -Seconds 1
     } while ($count -ne 0)
     Write-Progress -Activity "TeamsUser Extraction" -PercentComplete 100 -Status "Completed" -Completed
-    Write-Host $Global:M365DSCEmojiGreenCheckMark
     return $result
 }
 

@@ -120,12 +120,9 @@ function Get-TargetResource
     Write-Verbose -Message "Getting configuration of Team $DisplayName"
 
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -365,12 +362,9 @@ function Set-TargetResource
     Write-Verbose -Message "Setting configuration of Team $DisplayName"
 
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -420,8 +414,10 @@ function Set-TargetResource
 
         if ($ConnectionMode -eq "ServicePrincipal")
         {
-            $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' `
-                -InboundParameters $PSBoundParameters
+            Test-MSCloudLogin -Platform AzureAD `
+                -ApplicationId $ApplicationId `
+                -TenantId $TenantId `
+                -CertificateThumbprint $CertificateThumbprint
             $group = New-AzureADMSGroup -DisplayName $DisplayName -GroupTypes "Unified" -MailEnabled $true -SecurityEnabled $true -MailNickname $MailNickName
             $currentOwner = (($CurrentParameters.Owner)[0])
 
@@ -635,13 +631,12 @@ function Export-TargetResource
         [System.Management.Automation.PSCredential]
         $GlobalAdminAccount
     )
+    $InformationPreference = 'Continue'
+
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -658,10 +653,9 @@ function Export-TargetResource
     $teams = Get-Team
     $i = 1
     $content = ""
-    Write-Host "`r`n" -NoNewLine
     foreach ($team in $teams)
     {
-        Write-Host "    |---[$i/$($teams.Length)] $($team.DisplayName)" -NoNewLine
+        Write-Information "    [$i/$($teams.Length)] $($team.DisplayName)"
         $params = @{
             DisplayName           = $team.DisplayName
             GlobalAdminAccount    = $GlobalAdminAccount
@@ -699,7 +693,6 @@ function Export-TargetResource
         }
         $content += $partialContent
         $i++
-        Write-Host $Global:M365DSCEmojiGreenCheckmark
     }
 
     return $content

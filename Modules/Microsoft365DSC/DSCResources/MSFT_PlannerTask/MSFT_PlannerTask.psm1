@@ -6,7 +6,11 @@ function Get-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $PlanId,
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -22,11 +26,7 @@ function Get-TargetResource
 
         [Parameter()]
         [System.String]
-        $Bucket,
-
-        [Parameter()]
-        [System.String]
-        $TaskId,
+        $BucketName,
 
         [Parameter()]
         [System.String]
@@ -79,27 +79,18 @@ function Get-TargetResource
     Write-Verbose -Message "Getting configuration of Planner Task {$Title}"
 
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
     $nullReturn = @{
-        PlanId                = $PlanId
+        PlanName              = $PlanName
         Title                 = $Title
         Ensure                = "Absent"
         ApplicationId         = $ApplicationId
         GlobalAdminAccount    = $GlobalAdminAccount
-    }
-
-    # If no TaskId were passed, automatically assume that this is a new task;
-    if ([System.String]::IsNullOrEmpty($TaskId))
-    {
-        return $nullReturn
     }
 
     try
@@ -115,27 +106,52 @@ function Get-TargetResource
         . $usingScript
     }
     $task = [PlannerTaskObject]::new()
-    Write-Verbose -Message "Populating task {$taskId} from the Get method"
-    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskId)
+    Write-Verbose -Message "Populating task {$Title} from the Get method"
+    $PlanId = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName `
+                  -GroupId $GroupId `
+                  -ApplicationId $ApplicationId `
+                  -GlobalAdminAccount $GlobalAdminAccount
+    Write-Verbose -Message "Found Plan ID {$PlanId} from the Get method"
+    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $Title, $PlanId)
 
-    if ($null -eq $task)
+    if ([System.String]::IsNullOrEmpty($task.Title))
     {
         return $nullReturn
     }
     else
     {
+        Write-Verbose -Message "Task {$Title} was successfully populated from the Get method."
+        #region Plan Name
+        [array]$plan = Get-M365DSCPlannerPlansFromGroup -ApplicationId $ApplicationId `
+                    -GroupId $GroupId `
+                    -GlobalAdminAccount $GlobalAdminAccount | Where {$_.Title -eq $PlanName}
+        $PlanNameValue = $plan[0].Title
+        #endregion
+
+        #region Bucket Name
+        $BucketNameValue = Get-M365DSCPlannerBucketNameByTaskId -ApplicationId $ApplicationId `
+                    -TaskId $task.TaskId `
+                    -GlobalAdminAccount $GlobalAdminAccount
+        #endregion
+
         $NotesValue = $task.Notes
 
         #region Task Assignment
         if ($task.Assignments.Length -gt 0)
         {
-            $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' `
-        -InboundParameters $PSBoundParameters
+            Test-MSCloudLogin -Platform AzureAD -CloudCredential $GlobalAdminAccount
             $assignedValues = @()
             foreach ($assignee in $task.Assignments)
             {
-                $user = Get-AzureADUser -ObjectId $assignee
-                $assignedValues += $user.UserPrincipalName
+                try
+                {
+                    $user = Get-AzureADUser -ObjectId $assignee
+                    $assignedValues += $user.UserPrincipalName
+                }
+                catch
+                {
+                    Write-Verbose -MEssage $_
+                }
             }
         }
         #endregion
@@ -159,14 +175,14 @@ function Get-TargetResource
             $DueDateTimeValue = $task.DueDateTime
         }
         $results = @{
-            PlanId                = $PlanId
+            GroupId               = $GroupId
+            PlanName              = $PlanNameValue
             Title                 = $Title
             AssignedUsers         = $assignedValues
-            TaskId                = $task.TaskId
             Categories            = $categoryValues
             Attachments           = $task.Attachments
             Checklist             = $task.Checklist
-            Bucket                = $task.BucketId
+            BucketName            = $BucketNameValue
             Priority              = $task.Priority
             ConversationThreadId  = $task.ConversationThreadId
             PercentComplete       = $task.PercentComplete
@@ -189,7 +205,11 @@ function Set-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $PlanId,
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -202,6 +222,10 @@ function Set-TargetResource
         [Parameter()]
         [System.String]
         $Notes,
+
+        [Parameter()]
+        [System.String]
+        $BucketName,
 
         [Parameter()]
         [System.String]
@@ -262,16 +286,11 @@ function Set-TargetResource
     Write-Verbose -Message "Setting configuration of Planner Task {$Title}"
 
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
-
-    Connect-Graph -Scopes "Group.ReadWrite.All" | Out-Null
 
     $currentValues = Get-TargetResource @PSBoundParameters
 
@@ -289,12 +308,11 @@ function Set-TargetResource
     }
     $task = [PlannerTaskObject]::new()
 
-    if (-not [System.String]::IsNullOrEmpty($TaskId))
-    {
-        Write-Verbose -Message "Populating Task {$TaskId} from the Set method"
-        $task.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskId)
-    }
-
+    $PlanId = Get-M365DSCPlannerPlanIdByName -GlobalAdminAccount $GlobalAdminAccount `
+        -ApplicationId $ApplicationId `
+        -GroupId $GroupId `
+        -PlanName $PlanName
+    Write-Verbose -Message "Here!!!"
     $task.BucketId             = $Bucket
     $task.Title                = $Title
     $task.PlanId               = $PlanId
@@ -307,15 +325,21 @@ function Set-TargetResource
     #region Assignments
     if ($AssignedUsers.Length -gt 0)
     {
-        $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' `
-        -InboundParameters $PSBoundParameters
+        Test-MSCloudLogin -Platform AzureAD -CloudCredential $GlobalAdminAccount
         $AssignmentsValue = @()
         foreach ($userName in $AssignedUsers)
         {
-            $user = Get-AzureADUser -SearchString $userName
-            if ($null -ne $user)
+            try
             {
-                $AssignmentsValue += $user.ObjectId
+                $user = Get-AzureADUser -SearchString $userName -ErrorAction SilentlyContinue
+                if ($null -ne $user)
+                {
+                    $AssignmentsValue += $user.ObjectId
+                }
+            }
+            catch
+            {
+                Write-Verbose -Message "Couldn't get user {$UserName}"
             }
         }
         $task.Assignments = $AssignmentsValue
@@ -367,6 +391,18 @@ function Set-TargetResource
     }
     #endregion
 
+    #region Bucket
+    if (-Not [System.String]::IsNullOrEmpty($BucketName))
+    {
+        [array]$buckets = Get-M365DSCPlannerBucketsFromPlan -GroupId $GroupId `
+            -ApplicationId $ApplicationId `
+            -GlobalAdminAccount $GlobalAdminAccount `
+            -PlanId $PlanId `
+            -PlanName $PlanName | Where-Object -FilterScript {$_.Name -eq $BucketName}
+        $task.BucketId = $buckets[0].Id
+    }
+    #endregion
+
     if ($Ensure -eq 'Present' -and $currentValues.Ensure -eq 'Absent')
     {
         Write-Verbose -Message "Planner Task {$Title} doesn't already exist. Creating it."
@@ -377,7 +413,7 @@ function Set-TargetResource
         Write-Verbose -Message "Planner Task {$Title} already exists, but is not in the `
             Desired State. Updating it."
         $task.Update($GlobalAdminAccount, $ApplicationId)
-        #endregion
+
     }
     elseif ($Ensure -eq 'Absent' -and $currentValues.Ensure -eq 'Present')
     {
@@ -395,7 +431,11 @@ function Test-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $PlanId,
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -411,11 +451,7 @@ function Test-TargetResource
 
         [Parameter()]
         [System.String]
-        $Bucket,
-
-        [Parameter()]
-        [System.String]
-        $TaskId,
+        $BucketName,
 
         [Parameter()]
         [System.String]
@@ -514,15 +550,22 @@ function Export-TargetResource
 
         [Parameter()]
         [System.String]
-        $ApplicationId
+        $ApplicationId,
+
+        [Parameter()]
+        [System.Int32]
+        $Start,
+
+        [Parameter()]
+        [System.Int32]
+        $End
     )
+    $InformationPreference = 'Continue'
+
     #region Telemetry
-    $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $data.Add("Resource", $ResourceName)
+    $data.Add("Resource", $MyInvocation.MyCommand.ModuleName)
     $data.Add("Method", $MyInvocation.MyCommand)
-    $data.Add("Principal", $GlobalAdminAccount.UserName)
-    $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
@@ -530,12 +573,19 @@ function Export-TargetResource
         -InboundParameters $PSBoundParameters
 
     [array]$groups = Get-AzureADGroup -All:$true
-
-    $i = 1
+    $BucketModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\MSFT_PlannerBucket\MSFT_PlannerBucket.psm1' #Custom
+    $TaskModulePath = Join-Path $PSScriptRoot -ChildPath 'MSFT_PlannerTask.psm1' #Custom
+    $PlanModulePath = Join-Path $PSScriptRoot -ChildPath '..\MSFT_PlannerPlan\MSFT_PlannerPlan.psm1' #Custom
     $content = ''
-    foreach ($group in $groups)
+    for ($i = $Start; $i -le $groups.Length -and $i -le $end; $i++)
     {
-        Write-Host "    |---[$i/$($groups.Length)] $($group.DisplayName) - {$($group.ObjectID)}"
+        $group = $groups[$i-1]
+        $Total = $end
+        if ($end -gt $groups.Length)
+        {
+            $total = $groups.Length
+        }
+        Write-Information "    (GROUP)[$i/$($total)] $($group.DisplayName) - {$($group.ObjectID)}"
         try
         {
             [Array]$plans = Get-M365DSCPlannerPlansFromGroup -GroupId $group.ObjectId `
@@ -545,21 +595,75 @@ function Export-TargetResource
             $j = 1
             foreach ($plan in $plans)
             {
-                Write-Host "        |---[$j/$($plans.Length)] $($plan.Title)"
+                Write-Information "        (PLAN)[$j/$($plans.Length)] $($plan.Title)"
 
                 [Array]$tasks = Get-M365DSCPlannerTasksFromPlan -PlanId $plan.Id `
                                     -GlobalAdminAccount $GlobalAdminAccount `
                                     -ApplicationId $ApplicationId
+
+                #region PlannerPlan
+                $params = @{
+                    Title              = $plan.Title
+                    PlanId             = $plan.Id
+                    OwnerGroup         = $group.ObjectId
+                    ApplicationId      = $ApplicationId
+                    GlobalAdminAccount = $GlobalAdminAccount
+                }
+                Import-Module $PlanModulePath -Force | Out-Null
+                $result = Get-TargetResource @params
+                $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
+                $content += "        PlannerPlan " + (New-GUID).ToString() + "`r`n"
+                $content += "        {`r`n"
+                $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                        -ParameterName "GlobalAdminAccount"
+                $content += $currentDSCBlock
+                $content += "        }`r`n"
+                #endregion
+
+                #region Bucket
+                $buckets = Get-M365DSCPlannerBucketsFromPlan -PlanName $plan.Title `
+                               -GroupId $group.ObjectId `
+                               -PlanId $plan.Id `
+                               -ApplicationId $ApplicationId `
+                               -GlobalAdminAccount $GlobalAdminAccount
+                $b = 1
+                foreach ($bucket in $buckets)
+                {
+                    Write-Information "            (BUCKET)[$b/$($buckets.Length)] $($bucket.Name)"
+                    $params = @{
+                        Name               = $bucket.Name
+                        PlanId             = $plan.Id
+                        BucketId           = $bucket.Id
+                        PlanName           = $plan.Title
+                        GroupId            = $Group.ObjectId
+                        ApplicationId      = $ApplicationId
+                        GlobalAdminAccount = $GlobalAdminAccount
+                    }
+                    Import-Module $BucketModulePath -Force | Out-Null
+                    $result = Get-TargetResource @params
+                    $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
+                    $content += "        PlannerBucket " + (New-GUID).ToString() + "`r`n"
+                    $content += "        {`r`n"
+                    $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
+                    $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                        -ParameterName "GlobalAdminAccount"
+                    $content += $currentDSCBlock
+                    $content += "        }`r`n"
+                    $b++
+                }
+                #endregion
                 $k = 1
                 foreach ($task in $tasks)
                 {
-                    Write-Host "            [$k/$($tasks.Length)] $($task.Title)" -NoNewline
+                    Import-Module $TaskModulePath -Force | Out-Null
+                    Write-Information "            (TASK)[$k/$($tasks.Length)] $($task.Title)"
                     $params = @{
-                        TaskId                = $task.Id
-                        PlanId                = $plan.Id
-                        Title                 = $task.Title
-                        ApplicationId         = $ApplicationId
-                        GlobalAdminAccount    = $GlobalAdminAccount
+                        GroupId            = $group.ObjectId
+                        PlanName           = $plan.Title
+                        Title              = $task.Title
+                        ApplicationId      = $ApplicationId
+                        GlobalAdminAccount = $GlobalAdminAccount
                     }
 
                     $result = Get-TargetResource @params
@@ -593,10 +697,6 @@ function Export-TargetResource
                         $result.Remove("Checklist") | Out-Null
                     }
 
-                    # Fix Notes which can have multiple lines
-                    $result.Notes = $result.Notes.Replace('"', '``"')
-                    $result.Notes = $result.Notes.Replace("&", "``&")
-
                     $content += "        PlannerTask " + (New-GUID).ToString() + "`r`n"
                     $content += "        {`r`n"
                     $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
@@ -604,20 +704,33 @@ function Export-TargetResource
                         -ParameterName "GlobalAdminAccount"
                     if ($result.Attachments.Length -gt 0)
                     {
-                        $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
-                            -ParameterName "Attachments" `
-                            -IsCIMArray $true
+                        try
+                        {
+                            $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                                -ParameterName "Attachments" `
+                                -IsCIMArray $true
+                        }
+                        catch
+                        {
+                            Write-Verbose -Message $_
+                        }
                     }
                     if ($result.Checklist.Length -gt 0)
                     {
-                        $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
-                            -ParameterName "Checklist" `
-                            -IsCIMArray $true
+                        try
+                        {
+                            $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                                -ParameterName "Checklist" `
+                                -IsCIMArray $true
+                        }
+                        catch
+                        {
+                            Write-Verbose -Message $_
+                        }
                     }
                     $content += $currentDSCBlock
                     $content += "        }`r`n"
                     $k++
-                    Write-Host $Global:M365DSCEmojiGreenCheckmark
                 }
                 $j++
             }
@@ -626,7 +739,6 @@ function Export-TargetResource
         {
             Write-Verbose -Message $_
         }
-        $i++
     }
     return $content
 }
@@ -733,20 +845,216 @@ function Get-M365DSCPlannerPlansFromGroup
         [System.String]
         $ApplicationId
     )
-    $results = @()
-    $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
-    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    foreach ($plan in $taskResponse.value)
+    try
     {
-        $results += @{
-            Id    = $plan.id
-            Title = $plan.title
+        $results = @()
+        $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        foreach ($plan in $taskResponse.value)
+        {
+            $results += @{
+                Id    = $plan.id
+                Title = $plan.title
+            }
+        }
+        return $results
+    }
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerPlansFromGroup -GroupId $GroupId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
+}
+
+function Get-M365DSCPlannerBucketNameByTaskId
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $TaskId,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $GlobalAdminAccount,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ApplicationId
+    )
+    try
+    {
+        $uri = "https://graph.microsoft.com/v1.0/planner/tasks/$TaskId"
+        Write-Verbose -Message "Retrieving BuckerId at {$uri}"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        if ($null -ne $taskResponse.bucketId)
+        {
+            $bucketID = $taskResponse.bucketId
+
+            $uri = "https://graph.microsoft.com/v1.0/planner/buckets/$bucketID"
+            Write-Verbose -Message "BucketID {$bucketId} at {$uri}"
+            $bucketResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+                -ApplicationId $ApplicationId `
+                -Uri $uri `
+                -Method Get
+            $bucketName = $bucketResponse.name
+            return $bucketName
+        }
+        else
+        {
+            Write-Verbose -Message "BucketID was null"
+            return $null
         }
     }
-    return $results
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerBucketNameByTaskId -TaskId $TaskId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
+}
+
+function Get-M365DSCPlannerBucketsFromPlan
+{
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable[]])]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $GlobalAdminAccount,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ApplicationId
+    )
+    try 
+    {
+        $results = @()
+        $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/buckets"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        foreach ($bucket in $taskResponse.value)
+        {
+            $results += @{
+                Name     = $bucket.name
+                PlanName = $PlanName
+                GroupId  = $GroupId
+                Id       = $bucket.id
+            }
+        }
+        return $results
+    }
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerBucketsFromPlan -PlanName $PlanName -GroupId $GroupId -PlanId $PlanId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }    
+}
+
+function Get-M365DSCPlannerPlanIdByName
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $PlanName,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.PSCredential]
+        $GlobalAdminAccount,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ApplicationId
+    )
+    try
+    {
+        $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
+        $planResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        $PlanId = $null
+        foreach ($plan in $planResponse.value)
+        {
+            if ($plan.title -eq $PlanName)
+            {
+                $PlanId = $plan.id
+                break
+            }
+        }
+        return $PlanId
+    }
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName -GroupId $GroupId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
 }
 
 function Get-M365DSCPlannerTasksFromPlan
@@ -766,20 +1074,38 @@ function Get-M365DSCPlannerTasksFromPlan
         [System.String]
         $ApplicationId
     )
-    $results = @()
-    $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
-    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    foreach ($task in $taskResponse.value)
+    try
     {
-        $results += @{
-            Title = $task.title
-            Id    = $task.id
+        $results = @()
+        $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        foreach ($task in $taskResponse.value)
+        {
+            $results += @{
+                Title = $task.title
+                Id    = $task.id
+            }
         }
+        return $results
     }
-    return $results
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerTasksFromPlan -PlanId $PlanId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
 }
 
-Export-ModuleMember -Function *-TargetResource
+Export-ModuleMember -Function *

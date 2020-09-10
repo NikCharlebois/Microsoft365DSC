@@ -23,7 +23,7 @@ function New-M365DSCLogEntry
     try
     {
         $VerbosePreference = 'Continue'
-        Write-Host "$($Global:M365DSCEmojiRedX) Logging a new Error"
+        Write-Verbose -Message "Logging a new Error"
 
         #region Telemetry
         $driftedData = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
@@ -80,7 +80,7 @@ function Add-M365DSCEvent
         $EventID = 1
     )
 
-    $LogName = 'M365DSC'
+    $LogName = 'Microsoft365DSC'
 
     if ([System.Diagnostics.EventLog]::SourceExists($Source))
     {
