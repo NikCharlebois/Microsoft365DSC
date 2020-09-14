@@ -57,6 +57,7 @@ class PlannerTaskObject
                 -ApplicationId $ApplicationId `
                 -Uri $uri `
                 -Method Get
+
             $taskDetailsResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
                 -ApplicationId $ApplicationId `
                 -Uri ($uri + "/details") `
@@ -138,6 +139,10 @@ class PlannerTaskObject
             if ($_.Exception -like '*Forbidden*')
             {
                 Write-Warning $_.Message
+            }
+            elseif ($_ -like '*requested item is not found*')
+            {
+                return
             }
             else
             {
