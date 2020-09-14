@@ -10,6 +10,10 @@ function Get-TargetResource
 
         [Parameter(Mandatory = $true)]
         [System.String]
+        $TaskId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
         $GroupId,
 
         [Parameter(Mandatory = $true)]
@@ -105,14 +109,9 @@ function Get-TargetResource
         $usingScript = [ScriptBlock]::Create($usingScriptBody)
         . $usingScript
     }
-    $task = [PlannerTaskObject]::new()
     Write-Verbose -Message "Populating task {$Title} from the Get method"
-    $PlanId = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName `
-                  -GroupId $GroupId `
-                  -ApplicationId $ApplicationId `
-                  -GlobalAdminAccount $GlobalAdminAccount
-    Write-Verbose -Message "Found Plan ID {$PlanId} from the Get method"
-    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $Title, $PlanId)
+    $task = [PlannerTaskObject]::new()
+    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskId)
 
     if ([System.String]::IsNullOrEmpty($task.Title))
     {
@@ -177,6 +176,7 @@ function Get-TargetResource
         $results = @{
             GroupId               = $GroupId
             PlanName              = $PlanNameValue
+            TaskId                = $TaskId
             Title                 = $Title
             AssignedUsers         = $assignedValues
             Categories            = $categoryValues
@@ -188,7 +188,7 @@ function Get-TargetResource
             PercentComplete       = $task.PercentComplete
             StartDateTime         = $StartDateTimeValue
             DueDateTime           = $DueDateTimeValue
-            Notes                 = $NotesValue
+            Notes                 = $NotesValue.Replace("`“", "`"").Replace("`”", "`"").Replace("`’", "'").Replace("`…", "...")
             Ensure                = "Present"
             ApplicationId         = $ApplicationId
             GlobalAdminAccount    = $GlobalAdminAccount
@@ -213,6 +213,10 @@ function Set-TargetResource
 
         [Parameter(Mandatory = $true)]
         [System.String]
+        $TaskId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
         $Title,
 
         [Parameter()]
@@ -230,10 +234,6 @@ function Set-TargetResource
         [Parameter()]
         [System.String]
         $Bucket,
-
-        [Parameter()]
-        [System.String]
-        $TaskId,
 
         [Parameter()]
         [System.String]
@@ -312,7 +312,7 @@ function Set-TargetResource
         -ApplicationId $ApplicationId `
         -GroupId $GroupId `
         -PlanName $PlanName
-    Write-Verbose -Message "Here!!!"
+
     $task.BucketId             = $Bucket
     $task.Title                = $Title
     $task.PlanId               = $PlanId
@@ -436,6 +436,10 @@ function Test-TargetResource
         [Parameter(Mandatory = $true)]
         [System.String]
         $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $TaskId,
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -660,6 +664,7 @@ function Export-TargetResource
                     Write-Information "            (TASK)[$k/$($tasks.Length)] $($task.Title)"
                     $params = @{
                         GroupId            = $group.ObjectId
+                        TaskId             = $task.Id
                         PlanName           = $plan.Title
                         Title              = $task.Title
                         ApplicationId      = $ApplicationId
@@ -914,7 +919,7 @@ function Get-M365DSCPlannerBucketNameByTaskId
                 -ApplicationId $ApplicationId `
                 -Uri $uri `
                 -Method Get
-            $bucketName = $bucketResponse.name
+            $bucketName = $bucketResponse.name.Replace("`“", "`"").Replace("`”", "`"")
             return $bucketName
         }
         else
@@ -965,7 +970,7 @@ function Get-M365DSCPlannerBucketsFromPlan
         [System.String]
         $ApplicationId
     )
-    try 
+    try
     {
         $results = @()
         $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/buckets"
@@ -998,7 +1003,7 @@ function Get-M365DSCPlannerBucketsFromPlan
             return $results
         }
         return ""
-    }    
+    }
 }
 
 function Get-M365DSCPlannerPlanIdByName
