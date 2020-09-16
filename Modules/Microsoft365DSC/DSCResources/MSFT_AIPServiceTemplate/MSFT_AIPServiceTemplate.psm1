@@ -5,17 +5,16 @@ function Get-TargetResource
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
-        [ValidateSet('Yes')]
-        $IsSingleInstance,
+        [System.Hashtable]
+        $Names,
 
-        [Parameter()]
-        [System.String]
-        $PrefixSuffixNamingRequirement,
+        [Parameter(Mandatory = $true)]
+        [System.Hashtable]
+        $Descriptions,
 
         [Parameter()]
         [System.String[]]
-        $CustomBlockedWordsList,
+        $RightsDefinition,
 
         [Parameter()]
         [ValidateSet('Present', 'Absent')]
