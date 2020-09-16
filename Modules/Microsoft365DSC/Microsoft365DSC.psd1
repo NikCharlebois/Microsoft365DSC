@@ -89,7 +89,7 @@
         },
         @{
             ModuleName      = "MicrosoftTeams"
-            RequiredVersion = "1.1.4"
+            RequiredVersion = "1.1.6"
         },
         @{
             ModuleName      = "MSCloudLoginAssistant"
@@ -140,6 +140,7 @@
                           'Export-M365DSCConfiguration',
                           'New-M365DSCDeltaReport',
                           'New-M365DSCReportFromConfiguration',
+                          'New-M365DSCStubFiles',
                           'Set-M365DSCAgentCertificateConfiguration',
                           'Test-M365DSCAgent',
                           'Test-M365DSCDependenciesForNewVersions')
