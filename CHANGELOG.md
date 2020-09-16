@@ -1,6 +1,16 @@
 # Change log for Microsoft365DSC
 
-## UNRELEASED
+## 1.20.923.1
+
+* AIPServiceTemplate
+  * Initial Release
+* MISC
+  * Updated the Export GUI to introduce support for Azure
+    Information Protection;
+* DEPENDENCIES
+  * MSCloudLoginAssistant Updated to 1.0.38;
+
+## 1.20.916.1
 
 * MISC
   * Fixes an issue in the Install-M365DSCDevBranch function

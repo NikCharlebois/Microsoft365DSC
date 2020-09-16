@@ -52,6 +52,10 @@
     # Modules that must be imported into the global environment prior to importing this module
     RequiredModules   = @(
         @{
+            ModuleName      = "AIPService"
+            RequiredVersion = "1.0.3"
+        },
+        @{
             ModuleName      = "AzureADPreview"
             RequiredVersion = "2.0.2.105"
         },
@@ -89,7 +93,7 @@
         },
         @{
             ModuleName      = "MSCloudLoginAssistant"
-            RequiredVersion = "1.0.34"
+            RequiredVersion = "1.0.38"
         },
         @{
             ModuleName      = "ReverseDSC"
