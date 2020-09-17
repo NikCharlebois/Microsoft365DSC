@@ -12,6 +12,8 @@
 
 ## 1.20.916.1
 
+* AADServicePrincipal
+  * Initial Release (Issue #492)
 * EXOAvailabilityAddressSpace
   * Fixed an issue where if the user didn't have proper permissions
     the entire Export process would stop;
@@ -23,7 +25,8 @@
     the entire Export process would stop;
 * DEPENDENCIES
   * MicrosoftTeams Updated to 1.1.6;
-  * MSCloudLoginAssistant Updated to 1.0.37;
+  * MSCloudLoginAssistant Updated to 1.0.38;
+  * Updated Microsoft.PowerApps.Administration.PowerShell to 2.0.81;
 * MISC
   * Fixed issue with warning about unsupported resources in the
     Export mode based on authentication selected.
