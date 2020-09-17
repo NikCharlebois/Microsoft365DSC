@@ -1,12 +1,28 @@
-[ClassVersion("1.0.0.0"), FriendlyName("AADGroupsNamingPolicy")]
-class MSFT_AADGroupsNamingPolicy : OMI_BaseResource
+[ClassVersion("1.0.0")]
+class MSFT_AIPNameValue
 {
-    [Key, Description("Only valid value is 'Yes'."), ValueMap{"Yes"}, Values{"Yes"}] String IsSingleInstance;
-    [Write, Description("Prefixes and suffixes to add to the group name.")] String PrefixSuffixNamingRequirement;
-    [Write, Description("Comma delimited list of words that should be blocked from being included in groups' names.")] String CustomBlockedWordsList[];
-    [Write, Description("Specify if the Azure AD Groups Naming Policy should exist or not."), ValueMap{"Present","Absent"}, Values{"Present","Absent"}] String Ensure;
+    [Write, Description("Name of the item.")] String Name;
+    [Write, Description("Value associated with the item")] String Value;
+};
+[ClassVersion("1.0.0")]
+class MSFT_AIPRightsDefinition
+{
+    [Write, Description("Email address of the user assigned to the definition.")] String EmailAddress;
+    [Write, Description("List of rights associated to the definition.")] String Rights[];
+};
+[ClassVersion("1.0.0.0"), FriendlyName("AIPServiceTemplate")]
+class MSFT_AIPServiceTemplate : OMI_BaseResource
+{
+    [Key, Description("Specifies a list of names for the template. For additional details, refer to: https://docs.microsoft.com/en-us/powershell/module/aipservice/add-aipservicetemplate?view=azureipps"), EmbeddedInstance("MSFT_AIPNameValue")] String Names[];
+    [Key, Description("Specifies a list of descriptions for the template.")EmbeddedInstance("MSFT_AIPNameValue")] string Descriptions[];
+    [Write, Description("Specifies a list of rights definition objects."), EmbeddedInstance("MSFT_AIPRightsDefinition")] String RightsDefinitions[];
+    [Write, Description("Specifies the type of content expiration for content protected with the template."), ValueMap{"AfterDays","Never", "OnDate"}, Values{"AfterDays","Never", "OnDate"}] String ContentExpirationOption;
+    [Write, Description("Specifies the date on which content protected with the template expires.")] String ContentExpirationDate;
+    [Write, Description("Specifies the number of days from the first day of protection after which content protected with the template expires.")] UInt32 ContentValidityDuration;
+    [Write, Description("Specifies the validity period of use licenses for content that is protected with this template.")] UInt32 LicenseValidityDuration;
+    [Write, Description("Specifies the status of the template."), ValueMap{"Archived","Published"}, Values{"Archived","Published"}] String Status;
+    [Write, Description("Lists the users by email address (account or group) that can see and therefore select departmental templates from applications.")] String ScopedIdentities[];
+    [Write, Description("Determines the behavior of a departmental template in applications that do not support departmental templates.")] Boolean EnableInLegacyApps;
+    [Write, Description("Specify if this template should exist or not."), ValueMap{"Present","Absent"}, Values{"Present","Absent"}] String Ensure;
     [Write, Description("Credentials of the Azure Active Directory Admin"), EmbeddedInstance("MSFT_Credential")] String GlobalAdminAccount;
-    [Write, Description("Id of the Azure Active Directory application to authenticate with.")] String ApplicationId;
-    [Write, Description("Id of the Azure Active Directory tenant used for authentication.")] String TenantId;
-    [Write, Description("Thumbprint of the Azure Active Directory application's authentication certificate to use for authentication.")] String CertificateThumbprint;
 };

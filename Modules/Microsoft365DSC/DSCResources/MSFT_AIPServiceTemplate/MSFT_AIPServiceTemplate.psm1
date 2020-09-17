@@ -5,16 +5,47 @@ function Get-TargetResource
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.Hashtable]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
         $Names,
 
         [Parameter(Mandatory = $true)]
-        [System.Hashtable]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
         $Descriptions,
 
         [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $RightsDefinitions,
+
+        [Parameter()]
+        [System.String]
+        [ValidateSet("AfterDays", "Never", "OnDate")]
+        $ContentExpirationOption,
+
+        [Parameter()]
+        [System.String]
+        $ContentExpirationDate,
+
+        [Parameter()]
+        [System.Int32]
+        $ContentValidityDuration,
+
+        [Parameter()]
+        [System.Int32]
+        [ValidateRange(-1, 9999)]
+        $LicenseValidityDuration,
+
+        [Parameter()]
+        [System.String]
+        [ValidateSet("Archived","Published")]
+        $Status,
+
+        [Parameter()]
         [System.String[]]
-        $RightsDefinition,
+        $ScopedIdentities,
+
+        [Parameter()]
+        [System.Boolean]
+        $EnableInLegacyApps,
 
         [Parameter()]
         [ValidateSet('Present', 'Absent')]
@@ -23,22 +54,10 @@ function Get-TargetResource
 
         [Parameter()]
         [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount,
-
-        [Parameter()]
-        [System.String]
-        $ApplicationId,
-
-        [Parameter()]
-        [System.String]
-        $TenantId,
-
-        [Parameter()]
-        [System.String]
-        $CertificateThumbprint
+        $GlobalAdminAccount
     )
 
-    Write-Verbose -Message "Getting configuration of AzureAD Groups Naming Policy"
+    Write-Verbose -Message "Getting configuration of Azure Information Protection Template"
     #region Telemetry
     $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
     $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
@@ -49,11 +68,30 @@ function Get-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
-    $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' -InboundParameters $PSBoundParameters
+    $ConnectionMode = New-M365DSCConnection -Platform 'AzureInformationProtection' -InboundParameters $PSBoundParameters
 
-    $Policy = Get-AzureADDirectorySetting | Where-Object -FilterScript {$_.DisplayName -eq "Group.Unified"}
+    $AllTemplates = Get-AIPServiceTemplate
 
-    if ($null -eq $Policy)
+    $Template = $null
+    foreach ($item in $AllTemplates)
+    {
+        $hashNames = @{}
+        foreach ($entry in $item.Names)
+        {
+            $hashNames += @{
+                $entry.Key = $entry.Value
+            }
+        }
+        $comparison = Compare-Object -ReferenceObject $hashNames.Values `
+            -DifferenceObject $Names.Values
+        if ($null -eq $comparison)
+        {
+            $Template = $item
+            $break
+        }
+    }
+
+    if ($null -eq $Template)
     {
         $currentValues = $PSBoundParameters
         $currentValues.Ensure = "Absent"
@@ -61,20 +99,33 @@ function Get-TargetResource
     }
     else
     {
-        Write-Verbose "Found existing AzureAD Groups Naming Policy"
+        $NamesValue = ConvertTo-NamePairCIMArray -InputObject $Template.Names
+        $DescriptionsValue = ConvertTo-NamePairCIMArray `
+            -InputObject -$Template.Descriptions
+        $RightsDefinitionsValue = $null
+        if ($null -ne $Template.RightsDefinitions)
+        {
+            $RightsDefinitionsValue= ConvertTo-RightsDefinitionsCIMArray `
+                -RightsDefinitions $Template.RightsDefinitions
+        }
+        Write-Verbose "Found existing Azure Information Protection Template"
         $result = @{
-            IsSingleInstance              = 'Yes'
-            PrefixSuffixNamingRequirement = $Policy["PrefixSuffixNamingRequirement"]
-            CustomBlockedWordsList        = $Policy["CustomBlockedWordsList"].Split(',')
-            Ensure                        = "Present"
-            GlobalAdminAccount            = $GlobalAdminAccount
-            ApplicationId                 = $ApplicationId
-            TenantId                      = $TenantId
-            CertificateThumbprint         = $CertificateThumbprint
+            Names                   = $NamesValue
+            Descriptions            = $DescriptionsValue
+            RightsDefinitions       = $RightsDefinitionsValue
+            ContentExpirationOption = $Template.ContentExpirationOption.ToString()
+            ContentExpirationDate   = $Template.ContentExpirationDate.ToString()
+            ContentValidityDuration = $Template.ContentValidityDuration.ToString()
+            LicenseValidityDuration = $Template.LicenseValidityDuration.ToString()
+            Status                  = $Template.Status
+            ScopedIdentities        = $Template.ScopedIdentities
+            EnableInLegacyApps      = [boolean]$Template.EnableInLegacyApps
+            Ensure                  = "Present"
+            GlobalAdminAccount      = $GlobalAdminAccount
         }
 
         Write-Verbose -Message "Get-TargetResource Result: `n $(Convert-M365DscHashtableToString -Hashtable $result)"
-        return $result
+        return [HashTable]$result
     }
 }
 
@@ -84,17 +135,47 @@ function Set-TargetResource
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
-        [ValidateSet('Yes')]
-        $IsSingleInstance,
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $Names,
+
+        [Parameter(Mandatory = $true)]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $Descriptions,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $RightsDefinitions,
 
         [Parameter()]
         [System.String]
-        $PrefixSuffixNamingRequirement,
+        [ValidateSet("AfterDays", "Never", "OnDate")]
+        $ContentExpirationOption,
+
+        [Parameter()]
+        [System.String]
+        $ContentExpirationDate,
+
+        [Parameter()]
+        [System.Int32]
+        $ContentValidityDuration,
+
+        [Parameter()]
+        [System.Int32]
+        [ValidateRange(-1, 9999)]
+        $LicenseValidityDuration,
+
+        [Parameter()]
+        [System.String]
+        [ValidateSet("Archived","Published")]
+        $Status,
 
         [Parameter()]
         [System.String[]]
-        $CustomBlockedWordsList,
+        $ScopedIdentities,
+
+        [Parameter()]
+        [System.Boolean]
+        $EnableInLegacyApps,
 
         [Parameter()]
         [ValidateSet('Present', 'Absent')]
@@ -103,19 +184,7 @@ function Set-TargetResource
 
         [Parameter()]
         [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount,
-
-        [Parameter()]
-        [System.String]
-        $ApplicationId,
-
-        [Parameter()]
-        [System.String]
-        $TenantId,
-
-        [Parameter()]
-        [System.String]
-        $CertificateThumbprint
+        $GlobalAdminAccount
     )
 
     Write-Verbose -Message "Setting configuration of Azure AD Groups Naming Policy"
@@ -167,17 +236,47 @@ function Test-TargetResource
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
-        [ValidateSet('Yes')]
-        $IsSingleInstance,
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $Names,
+
+        [Parameter(Mandatory = $true)]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $Descriptions,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $RightsDefinitions,
 
         [Parameter()]
         [System.String]
-        $PrefixSuffixNamingRequirement,
+        [ValidateSet("AfterDays", "Never", "OnDate")]
+        $ContentExpirationOption,
+
+        [Parameter()]
+        [System.String]
+        $ContentExpirationDate,
+
+        [Parameter()]
+        [System.Int32]
+        $ContentValidityDuration,
+
+        [Parameter()]
+        [System.Int32]
+        [ValidateRange(-1, 9999)]
+        $LicenseValidityDuration,
+
+        [Parameter()]
+        [System.String]
+        [ValidateSet("Archived","Published")]
+        $Status,
 
         [Parameter()]
         [System.String[]]
-        $CustomBlockedWordsList,
+        $ScopedIdentities,
+
+        [Parameter()]
+        [System.Boolean]
+        $EnableInLegacyApps,
 
         [Parameter()]
         [ValidateSet('Present', 'Absent')]
@@ -186,19 +285,7 @@ function Test-TargetResource
 
         [Parameter()]
         [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount,
-
-        [Parameter()]
-        [System.String]
-        $ApplicationId,
-
-        [Parameter()]
-        [System.String]
-        $TenantId,
-
-        [Parameter()]
-        [System.String]
-        $CertificateThumbprint
+        $GlobalAdminAccount
     )
 
     Write-Verbose -Message "Testing configuration of AzureAD Groups Naming Policy"
@@ -228,19 +315,7 @@ function Export-TargetResource
     (
         [Parameter()]
         [System.Management.Automation.PSCredential]
-        $GlobalAdminAccount,
-
-        [Parameter()]
-        [System.String]
-        $ApplicationId,
-
-        [Parameter()]
-        [System.String]
-        $TenantId,
-
-        [Parameter()]
-        [System.String]
-        $CertificateThumbprint
+        $GlobalAdminAccount
     )
     #region Telemetry
     $ResourceName = $MyInvocation.MyCommand.ModuleName.Replace("MSFT_", "")
@@ -253,29 +328,151 @@ function Export-TargetResource
     #endregion
 
     $dscContent = ''
-    $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' -InboundParameters $PSBoundParameters
-    $Params = @{
-        ApplicationId          = $ApplicationId
-        TenantId               = $TenantId
-        CertificateThumbprint  = $CertificateThumbprint
-        IsSingleInstance       = 'Yes'
-        GlobalAdminAccount = $GlobalAdminAccount
-    }
+    $i = 1
+    $ConnectionMode = New-M365DSCConnection -Platform 'AzureInformationProtection' `
+        -InboundParameters $PSBoundParameters
 
-    $Results = Get-TargetResource @Params
+    [Array]$Templates = Get-AIPServiceTemplate
 
-    if ($Results.Ensure -eq 'Present')
+    Write-Host "`r`n" -NoNewLine
+    foreach ($Template in $Templates)
     {
-        $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
-            -Results $Results
-        $dscContent += Get-M365DSCExportContentForResource -ResourceName $ResourceName `
-            -ConnectionMode $ConnectionMode `
-            -ModulePath $PSScriptRoot `
-            -Results $Results `
-            -GlobalAdminAccount $GlobalAdminAccount
+        $objNames = ConvertTo-NameValuePairCIMArray -InputObject $Template.Names
+        $objDescriptions = ConvertTo-NameValuePairCIMArray -InputObject $Template.Descriptions
+        $Params = @{
+            Names              = $objNames
+            Descriptions       = $objDescriptions
+            GlobalAdminAccount = $GlobalAdminAccount
+        }
+
+        $Results = Get-TargetResource @Params
+
+        # HACK to convert back the result has a HashTable
+        $newResults = @{}
+        foreach ($entry in $Results)
+        {
+            if ($null -ne $entry)
+            {
+                foreach ($key in $entry.Keys)
+                {
+                    $newResults += @{
+                        $key = $entry.$key
+                    }
+                }
+            }
+        }
+        $Results = $newResults
+
+        if ($Results.Ensure -eq 'Present')
+        {
+            Write-Host "    |---[$i/$($Templates.Count)] $($Template.Name)" -NoNewLine
+            if ($null -ne $Results.RightsDefinitions)
+            {
+                $RightsDefinitionValue =  ConvertTo-RightsDefinitionsString `
+                    -RightsDefinitions $Results.RightsDefinitions
+                $Results.RightsDefinitions = $RightsDefinitionValue
+            }
+
+            $namesHash = $null
+            foreach ($name in $Results.Names)
+            {
+                $namesHash += @{
+                    $name.Key = $name.Value
+                }
+            }
+
+            $Results.Names = $namesHash
+
+            $descriptionsHash = $null
+            foreach ($description in $Results.Descriptions)
+            {
+                $descriptionsHash += @{
+                    $description.Key = $description.Value
+                }
+            }
+
+            $Results.Descriptions = $descriptionsHash
+
+            $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
+                -Results $Results
+            $currentDSCBlock = Get-M365DSCExportContentForResource -ResourceName $ResourceName `
+                -ConnectionMode $ConnectionMode `
+                -ModulePath $PSScriptRoot `
+                -Results $Results `
+                -GlobalAdminAccount $GlobalAdminAccount
+
+            if ($null -ne $Results.RightsDefinitions)
+            {
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock `
+                    -ParameterName "RightsDefinitions"
+            }
+
+            Write-Host $Global:M365DSCEmojiGreenCheckMark
+            $dscContent += $currentDSCBlock
+        }
     }
-    Write-Host $Global:M365DSCEmojiGreenCheckMark
     return $dscContent
 }
+
+function ConvertTo-RightsDefinitionsString
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    param(
+        [Parameter(Mandatory = $true)]
+        $RightsDefinitions
+    )
+
+    $StringContent = "@(`r`n"
+    foreach ($definition in $RightsDefinitions)
+    {
+        $StringContent += "                MSFT_AIPRightsDefinition`r`n"
+        $StringContent += "                {`r`n"
+        $StringContent += "                    EmailAddress  = '$($definition.Email)'`r`n"
+        $StringContent += "                    Rights        = '$($definition.Rights -Join ",")'`r`n"
+        $StringContent += "                }`r`n"
+    }
+    $StringContent += "            )"
+    return $StringContent
+}
+
+function ConvertTo-RightsDefinitionsCIMArray
+{
+    [CmdletBinding()]
+    [OutputType([System.Object[]])]
+    Param(
+        [parameter(Mandatory = $true)]
+        [System.Object[]]
+        $RightsDefinitions
+    )
+    $definitions = @()
+    foreach ($definition in $RightsDefinitions)
+    {
+        $entry = @{
+            EmailAddress  = $definition.Identity
+            Rights        = $definition.Rights
+        }
+        $definitions += $entry
+    }
+    return $definitions
+}
+
+function ConvertTo-NameValuePairCIMArray
+{
+    [CmdletBinding()]
+    [OutputType([Microsoft.Management.Infrastructure.CimInstance])]
+    Param(
+        [parameter(Mandatory = $true)]
+        [System.Object]
+        $InputObject
+    )
+    $results = @{}
+    foreach ($object in $InputObject)
+    {
+        $results.Add($object.Key, $object.Value)
+    }
+    return $results
+}
+
 
 Export-ModuleMember -Function *-TargetResource

@@ -8,6 +8,7 @@
   * Updated the Export GUI to introduce support for Azure
     Information Protection;
 * DEPENDENCIES
+  * Introduced dependency on AIPService 1.0.0.3;
   * MSCloudLoginAssistant Updated to 1.0.38;
 
 ## 1.20.916.1
