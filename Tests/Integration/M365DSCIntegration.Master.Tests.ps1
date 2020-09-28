@@ -8,10 +8,6 @@ param
     [System.String]
     $GlobalAdminPassword,
 
-    [Parameter(Mandatory = $true)]
-    [System.String]
-    $Domain,
-
     [Parameter()]
     [System.String]
     [ValidateSet('Public', 'GCC', 'GCCH', 'Germany', 'China')]
@@ -26,10 +22,6 @@ Configuration Master
         [System.Management.Automation.PSCredential]
         $GlobalAdmin,
 
-        [Parameter(Mandatory = $true)]
-        [System.String]
-        $Domain,
-
         [Parameter()]
         [System.String]
         [ValidateSet('Public', 'GCC', 'GCCH', 'Germany', 'China')]
@@ -37,9 +29,28 @@ Configuration Master
     )
 
     Import-DscResource -ModuleName Microsoft365DSC
-
+    $Domain = $GlobalAdmin.Username.Split('@')[1]
     Node Localhost
     {
+        AADApplication DSCApp1
+        {
+            DisplayName                   = "App1"
+            AvailableToOtherTenants       = $false
+            GroupMembershipClaims         = $null
+            Homepage                      = "https://app.contoso.com"
+            IdentifierUris                = "https://app.contoso.com"
+            KnownClientApplications       = ""
+            LogoutURL                     = "https://app.contoso.com/logout"
+            Oauth2AllowImplicitFlow       = $false
+            Oauth2AllowUrlPathMatching    = $false
+            Oauth2RequirePostResponse     = $false
+            PublicClient                  = $false
+            ReplyURLs                     = "https://app.contoso.com"
+            SamlMetadataUrl               = ""
+            Ensure                        = "Present"
+            GlobalAdminAccount            = $GlobalAdmin
+        }
+
         AADGroupsNamingPolicy GroupsNamingPolicy
         {
             CustomBlockedWordsList        = @("CEO", "President");
@@ -633,6 +644,22 @@ Configuration Master
             )
         }
 
+        SPOTenantCdnEnabled CDN
+        {
+            Enable             = $True
+            CdnType            = "Public"
+            GlobalAdminAccount = $GlobalAdmin;
+            Ensure             = "Present"
+        }
+
+        SPOOrgAssetsLibrary OrgAssets
+        {
+            LibraryUrl         = "https://$($Domain.Split('.')[0]).sharepoint.com/sites/Modern/Shared Documents"
+            CdnType            = "Public"
+            GlobalAdminAccount = $GlobalAdmin;
+            Ensure             = "Present"
+        }
+
         # TODO - Investigate this for GCC
         <#if ($Environment -ne 'GCC')
         {
@@ -932,5 +959,5 @@ $ConfigurationData = @{
 # Compile and deploy configuration
 $password = ConvertTo-SecureString $GlobalAdminPassword -AsPlainText -Force
 $credential = New-Object System.Management.Automation.PSCredential ($GlobalAdminUser, $password)
-Master -ConfigurationData $ConfigurationData -GlobalAdmin $credential -Domain $Domain -Environment $Environment
+Master -ConfigurationData $ConfigurationData -GlobalAdmin $credential -Environment $Environment
 Start-DscConfiguration Master -Wait -Force -Verbose
