@@ -281,7 +281,7 @@ function Export-TargetResource
     $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' `
         -InboundParameters $PSBoundParameters
 
-    [array]$groups = Get-AzureADGroup -All:$true | Where-Object -FilterScript {$_.OnPremisesSyncEnabled -ne $True}
+    [array]$groups = Get-AzureADGroup -All:$true
 
     $i = 1
     $content = ''

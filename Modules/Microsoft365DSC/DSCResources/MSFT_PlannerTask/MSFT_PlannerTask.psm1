@@ -6,10 +6,6 @@ function Get-TargetResource
     (
         [Parameter(Mandatory = $true)]
         [System.String]
-        $TaskId,
-
-        [Parameter(Mandatory = $true)]
-        [System.String]
         $PlanName,
 
         [Parameter(Mandatory = $true)]
@@ -110,7 +106,13 @@ function Get-TargetResource
         . $usingScript
     }
     $task = [PlannerTaskObject]::new()
-    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskId)
+    Write-Verbose -Message "Populating task {$Title} from the Get method"
+    $PlanId = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName `
+                  -GroupId $GroupId `
+                  -ApplicationId $ApplicationId `
+                  -GlobalAdminAccount $GlobalAdminAccount
+    Write-Verbose -Message "Found Plan ID {$PlanId} from the Get method"
+    $task.PopulateById($GlobalAdminAccount, $ApplicationId, $Title, $PlanId)
 
     if ([System.String]::IsNullOrEmpty($task.Title))
     {
@@ -127,13 +129,9 @@ function Get-TargetResource
         #endregion
 
         #region Bucket Name
-        $BucketNameValue = $null
-        if (-not [System.String]::IsNullOrEmpty($BucketName))
-        {
-            $BucketNameValue = Get-M365DSCPlannerBucketNameByTaskId -ApplicationId $ApplicationId `
-                    -TaskId $TaskId `
+        $BucketNameValue = Get-M365DSCPlannerBucketNameByTaskId -ApplicationId $ApplicationId `
+                    -TaskId $task.TaskId `
                     -GlobalAdminAccount $GlobalAdminAccount
-        }
         #endregion
 
         $NotesValue = $task.Notes
@@ -152,7 +150,7 @@ function Get-TargetResource
                 }
                 catch
                 {
-                    Write-Verbose -MEssage $_
+                    Write-Verbose -Message $_
                 }
             }
         }
@@ -177,7 +175,6 @@ function Get-TargetResource
             $DueDateTimeValue = $task.DueDateTime
         }
         $results = @{
-            TaskId                = $task.TaskId
             GroupId               = $GroupId
             PlanName              = $PlanNameValue
             Title                 = $Title
@@ -192,6 +189,7 @@ function Get-TargetResource
             StartDateTime         = $StartDateTimeValue
             DueDateTime           = $DueDateTimeValue
             Notes                 = $NotesValue
+            CompletedDateTime     = $task.CompletedDateTime
             Ensure                = "Present"
             ApplicationId         = $ApplicationId
             GlobalAdminAccount    = $GlobalAdminAccount
@@ -206,10 +204,6 @@ function Set-TargetResource
     [CmdletBinding()]
     param
     (
-        [Parameter(Mandatory = $true)]
-        [System.String]
-        $TaskId,
-
         [Parameter(Mandatory = $true)]
         [System.String]
         $PlanName,
@@ -237,6 +231,10 @@ function Set-TargetResource
         [Parameter()]
         [System.String]
         $Bucket,
+
+        [Parameter()]
+        [System.String]
+        $TaskId,
 
         [Parameter()]
         [System.String]
@@ -315,6 +313,7 @@ function Set-TargetResource
         -ApplicationId $ApplicationId `
         -GroupId $GroupId `
         -PlanName $PlanName
+    Write-Verbose -Message "Here!!!"
     $task.BucketId             = $Bucket
     $task.Title                = $Title
     $task.PlanId               = $PlanId
@@ -431,10 +430,6 @@ function Test-TargetResource
     [OutputType([System.Boolean])]
     param
     (
-        [Parameter(Mandatory = $true)]
-        [System.String]
-        $TaskId,
-
         [Parameter(Mandatory = $true)]
         [System.String]
         $PlanName,
@@ -578,7 +573,7 @@ function Export-TargetResource
     $ConnectionMode = New-M365DSCConnection -Platform 'AzureAD' `
         -InboundParameters $PSBoundParameters
 
-    [array]$groups = Get-AzureADGroup -All:$true | Where-Object -FilterScript {$_.OnPremisesSyncEnabled -ne $True}
+    [array]$groups = Get-AzureADGroup -All:$true
     $BucketModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\MSFT_PlannerBucket\MSFT_PlannerBucket.psm1' #Custom
     $TaskModulePath = Join-Path $PSScriptRoot -ChildPath 'MSFT_PlannerTask.psm1' #Custom
     $PlanModulePath = Join-Path $PSScriptRoot -ChildPath '..\MSFT_PlannerPlan\MSFT_PlannerPlan.psm1' #Custom
@@ -665,7 +660,6 @@ function Export-TargetResource
                     Import-Module $TaskModulePath -Force | Out-Null
                     Write-Information "            (TASK)[$k/$($tasks.Length)] $($task.Title)"
                     $params = @{
-                        TaskId             = $task.TaskId
                         GroupId            = $group.ObjectId
                         PlanName           = $plan.Title
                         Title              = $task.Title
@@ -744,10 +738,7 @@ function Export-TargetResource
         }
         catch
         {
-            $original = $VerbosePreference
-            $VerbosePreference = 'Continue'
             Write-Verbose -Message $_
-            $VerbosePreference = $original
         }
     }
     return $content
@@ -855,20 +846,38 @@ function Get-M365DSCPlannerPlansFromGroup
         [System.String]
         $ApplicationId
     )
-    $results = @()
-    $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
-    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    foreach ($plan in $taskResponse.value)
+    try
     {
-        $results += @{
-            Id    = $plan.id
-            Title = $plan.title
+        $results = @()
+        $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        foreach ($plan in $taskResponse.value)
+        {
+            $results += @{
+                Id    = $plan.id
+                Title = $plan.title
+            }
         }
+        return $results
     }
-    return $results
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerPlansFromGroup -GroupId $GroupId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
 }
 
 function Get-M365DSCPlannerBucketNameByTaskId
@@ -888,20 +897,48 @@ function Get-M365DSCPlannerBucketNameByTaskId
         [System.String]
         $ApplicationId
     )
-    $uri = "https://graph.microsoft.com/v1.0/planner/tasks/$TaskId"
-    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    $bucketID = $taskResponse.value.bucketId
+    try
+    {
+        $uri = "https://graph.microsoft.com/v1.0/planner/tasks/$TaskId"
+        Write-Verbose -Message "Retrieving BuckerId at {$uri}"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        if ($null -ne $taskResponse.bucketId)
+        {
+            $bucketID = $taskResponse.bucketId
 
-    $uri = "https://graph.microsoft.com/v1.0/planner/buckets/$bucketID"
-    $bucketResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    $bucketName = $bucketResponse.value.name
-    return $bucketName
+            $uri = "https://graph.microsoft.com/v1.0/planner/buckets/$bucketID"
+            Write-Verbose -Message "BucketID {$bucketId} at {$uri}"
+            $bucketResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+                -ApplicationId $ApplicationId `
+                -Uri $uri `
+                -Method Get
+            $bucketName = $bucketResponse.name
+            return $bucketName
+        }
+        else
+        {
+            Write-Verbose -Message "BucketID was null"
+            return $null
+        }
+    }
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerBucketNameByTaskId -TaskId $TaskId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
 }
 
 function Get-M365DSCPlannerBucketsFromPlan
@@ -929,22 +966,40 @@ function Get-M365DSCPlannerBucketsFromPlan
         [System.String]
         $ApplicationId
     )
-    $results = @()
-    $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/buckets"
-    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    foreach ($bucket in $taskResponse.value)
+    try
     {
-        $results += @{
-            Name     = $bucket.name
-            PlanName = $PlanName
-            GroupId  = $GroupId
-            Id       = $bucket.id
+        $results = @()
+        $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/buckets"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        foreach ($bucket in $taskResponse.value)
+        {
+            $results += @{
+                Name     = $bucket.name
+                PlanName = $PlanName
+                GroupId  = $GroupId
+                Id       = $bucket.id
+            }
         }
+        return $results
     }
-    return $results
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerBucketsFromPlan -PlanName $PlanName -GroupId $GroupId -PlanId $PlanId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
 }
 
 function Get-M365DSCPlannerPlanIdByName
@@ -968,21 +1023,39 @@ function Get-M365DSCPlannerPlanIdByName
         [System.String]
         $ApplicationId
     )
-    $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
-    $planResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    $PlanId = $null
-    foreach ($plan in $planResponse.value)
+    try
     {
-        if ($plan.title -eq $PlanName)
+        $uri = "https://graph.microsoft.com/v1.0/groups/$GroupId/planner/plans"
+        $planResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        $PlanId = $null
+        foreach ($plan in $planResponse.value)
         {
-            $PlanId = $plan.id
-            break
+            if ($plan.title -eq $PlanName)
+            {
+                $PlanId = $plan.id
+                break
+            }
         }
+        return $PlanId
     }
-    return $PlanId
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerPlanIdByName -PlanName $PlanName -GroupId $GroupId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
 }
 
 function Get-M365DSCPlannerTasksFromPlan
@@ -1002,20 +1075,38 @@ function Get-M365DSCPlannerTasksFromPlan
         [System.String]
         $ApplicationId
     )
-    $results = @()
-    $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
-    $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
-        -ApplicationId $ApplicationId `
-        -Uri $uri `
-        -Method Get
-    foreach ($task in $taskResponse.value)
+    try
     {
-        $results += @{
-            Title = $task.title
-            TaskId    = $task.id
+        $results = @()
+        $uri = "https://graph.microsoft.com/v1.0/planner/plans/$PlanId/tasks"
+        $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
+            -ApplicationId $ApplicationId `
+            -Uri $uri `
+            -Method Get
+        foreach ($task in $taskResponse.value)
+        {
+            $results += @{
+                Title = $task.title
+                Id    = $task.id
+            }
         }
+        return $results
     }
-    return $results
+    catch
+    {
+        if ($_.Exception -like '*Forbidden*')
+        {
+            Write-Warning $_.Exception
+        }
+        else
+        {
+            Write-Host $_
+            Start-Sleep -Seconds 120
+            $results = Get-M365DSCPlannerTasksFromPlan -PlanId $PlanId -GlobalAdminAccount $GlobalAdminAccount -ApplicationId $ApplicationId
+            return $results
+        }
+        return ""
+    }
 }
 
 Export-ModuleMember -Function *

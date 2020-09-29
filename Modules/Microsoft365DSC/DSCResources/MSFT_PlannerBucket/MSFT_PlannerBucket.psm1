@@ -50,10 +50,26 @@ function Get-TargetResource
                         -ApplicationID $ApplicationId `
                         -GlobalAdminAccount $GlobalAdminAccount
     [array]$plan = $plans | Where-Object -FilterScript {$_.Id -eq $PlanId}
+    if ($null -eq $plan -or $plan.Length -eq 0)
+    {
+        [array]$plan = $plans | Where-Object -FilterScript {$_.Title -eq $PlanName}
+        if ($null -eq $plan -or $plan.Length -eq 0)
+        {
+            Write-Verbose -Message "Waiting 10 seconds to get Plan"
+            Start-Sleep -Seconds 10
+            [array]$plan = $plans | Where-Object -FilterScript {$_.Title -eq $PlanName}
+        }
+    }
 
     if ($plan.Length -eq 1)
     {
         Write-Verbose -Message "Found Plan {$PlanName} with Id {$($plan.Id)}"
+    }
+    elseif ($plan.Length -gt 1)
+    {
+        Write-Verbose -Message "Found {$($plan.Length)} Plans with name {$PlanName}. Using the first instance to create the bucket."
+        [array]$plan = $plan[0]
+        Write-Verbose -Message "PlanID = {$($plan.Id)}"
     }
     else
     {
@@ -156,7 +172,20 @@ function Set-TargetResource
                 -ApplicationID $ApplicationId `
                 -GlobalAdminAccount $GlobalAdminAccount
         [array]$plan = $plans | Where-Object -FilterScript {$_.Id -eq $PlanId}
+        if ($null -eq $plan -or $plan.Length -eq 0)
+        {
+            [array]$plan = $plans | Where-Object -FilterScript {$_.Title -eq $PlanName}
+            if ($null -eq $plan -or $plan.Length -eq 0)
+            {
+                Start-Sleep -Seconds 10
+                [array]$plan = $plans | Where-Object -FilterScript {$_.Title -eq $PlanName}
+            }
+        }
 
+        if ($plan.Length -gt 1)
+        {
+            [array]$plan = $plan[0]
+        }
         Write-Verbose -Message "Planner Bucket {$Name} doesn't already exist. Creating it."
         New-M365DSCPlannerBucket -Name $Name -PlanId $plan.Id `
             -ApplicationId $ApplicationId `
