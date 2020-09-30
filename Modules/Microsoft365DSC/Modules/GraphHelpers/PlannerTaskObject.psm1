@@ -156,11 +156,12 @@ class PlannerTaskObject
         {
             if ($_.Exception -like '*Forbidden*')
             {
+                Write-Host "Request Forbidden - PlannerTaskObject"
                 Write-Warning $_.Message
             }
             else
             {
-                Write-Host $_
+                Write-Host $_ -ForegroundColor Cyan
                 Start-Sleep -Seconds 120
                 $this.PopulateById($GlobalAdminAccount, $ApplicationId, $TaskName, $PlanId)
             }
