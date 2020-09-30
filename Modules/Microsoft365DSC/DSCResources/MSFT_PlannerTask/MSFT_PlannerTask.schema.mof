@@ -15,6 +15,7 @@ class MSFT_PlannerTaskChecklistItem
 class MSFT_PlannerTask : OMI_BaseResource
 {
     [Key, Description("Id of the Group associated with the Task.")] string GroupId;
+    [Key, Description("Id of the Task.")] string TaskId;
     [Key, Description("Id of the Planner Plan which contains the Task.")] string PlanName;
     [Key, Description("The Title of the Planner Task.")] string Title;
     [Write, Description("List of categories assigned to the task."), ValueMap{"Pink", "Red", "Yellow", "Green", "Blue", "Purple"}, Values{"Pink", "Red", "Yellow", "Green", "Blue", "Purple"}] string Categories[];
