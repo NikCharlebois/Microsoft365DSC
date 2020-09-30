@@ -3,7 +3,7 @@ class MSFT_PlannerTaskAttachment
 {
     [Write, Description("Alias of for the attachment.")] String Alias;
     [Write, Description("Uri of the link to the attachment.")] String Uri;
-    [Write, Description("Type of attachment."), ValueMap{"PowerPoint", "Word", "Excel", "Other"}, Values{"PowerPoint", "Word", "Excel", "Other"}] String Type;
+    [Write, Description("Type of attachment."), ValueMap{"PowerPoint", "Word", "Excel", "Pdf", "Other"}, Values{"PowerPoint", "Word", "Excel", "Pdf", "Other"}] String Type;
 };
 [ClassVersion("1.0.0")]
 class MSFT_PlannerTaskChecklistItem

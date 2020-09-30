@@ -57,7 +57,7 @@
         },
         @{
             ModuleName      = "DSCParser"
-            RequiredVersion = "1.1.0.3"
+            RequiredVersion = "1.2.0.0"
         },
         @{
             ModuleName      = "ExchangeOnlineManagement"
@@ -69,10 +69,6 @@
         },
         @{
             ModuleName      = "Microsoft.Graph.Groups.Planner"
-            RequiredVersion = "0.7.0"
-        },
-        @{
-            ModuleName      = "Microsoft.Graph.Identity.ConditionalAccess"
             RequiredVersion = "0.7.0"
         },
         @{

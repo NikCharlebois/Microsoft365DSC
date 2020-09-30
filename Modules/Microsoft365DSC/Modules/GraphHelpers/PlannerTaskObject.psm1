@@ -48,8 +48,8 @@ class PlannerTaskObject
         return $null
     }
 
-    [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskId)
-    {
+    [void]PopulateById([System.Management.Automation.PSCredential]$GlobalAdminAccount, [String]$ApplicationId, [string]$TaskName, [string]$PlanId)
+    {            
         try
         {
             $uri = "https://graph.microsoft.com/beta/planner/tasks/$TaskId"
@@ -126,8 +126,9 @@ class PlannerTaskObject
             $this.StartDateTime        = $taskResponse.startDateTime
             $this.ConversationThreadId = $taskResponse.conversationThreadId
             $this.DueDateTime          = $taskResponse.dueDateTime
-            $this.CompletedDateTime    = $taskResponse.completedDateTime
+            $this.CompletedDateTime    = $task.completedDateTime
             $this.Priority             = $taskResponse.priority
+            $this.PercentComplete      = $task.percentComplete
             $this.Notes                = $taskDetailsResponse.description
             $this.Assignments          = $assignmentsValue
             $this.Attachments          = $attachmentsValue
@@ -158,7 +159,6 @@ class PlannerTaskObject
         $sb.Append("{") | Out-Null
         $sb.Append("`"planId`":`"$($this.PlanId)`"") | Out-Null
         $titleValue = $this.Title | ConvertTo-Json
-        #$titleValue = $titleValue.Replace('\"','\`"')
 
         $sb.Append(",`"title`":$titleValue") | Out-Null
         if (-not [System.String]::IsNullOrEmpty($this.BucketId))
@@ -282,6 +282,7 @@ class PlannerTaskObject
         $VerbosePreference = 'Continue'
         $uri = "https://graph.microsoft.com/v1.0/planner/tasks"
         $body = $this.ConvertToJSONTask()
+        Write-Verbose -Message "JSON Body {$body}"
         Write-Verbose -Message "Trying to create new Task"
         $taskResponse = Invoke-MSCloudLoginMicrosoftGraphAPI -CloudCredential $GlobalAdminAccount `
             -ApplicationId $ApplicationId `

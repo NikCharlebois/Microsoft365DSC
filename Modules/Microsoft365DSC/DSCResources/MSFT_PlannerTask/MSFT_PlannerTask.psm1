@@ -149,7 +149,7 @@ function Get-TargetResource
                 }
                 catch
                 {
-                    Write-Verbose -MEssage $_
+                    Write-Verbose -Message $_
                 }
             }
         }
@@ -188,6 +188,7 @@ function Get-TargetResource
             PercentComplete       = $task.PercentComplete
             StartDateTime         = $StartDateTimeValue
             DueDateTime           = $DueDateTimeValue
+            CompletedDateTime     = $task.CompletedDateTime
             Notes                 = $NotesValue.Replace("`“", "`"").Replace("`”", "`"").Replace("`’", "'").Replace("`…", "...")
             Ensure                = "Present"
             ApplicationId         = $ApplicationId
@@ -312,7 +313,6 @@ function Set-TargetResource
         -ApplicationId $ApplicationId `
         -GroupId $GroupId `
         -PlanName $PlanName
-
     $task.BucketId             = $Bucket
     $task.Title                = $Title
     $task.PlanId               = $PlanId
