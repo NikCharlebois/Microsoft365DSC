@@ -163,7 +163,7 @@ function Get-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
-    Write-Verbose -Message "Checking for the Intune App Protection Policy {$DisplayName}"
+    Write-Verbose -Message "Checking for the Intune App Protection Policy for WIndows{$DisplayName}"
     $ConnectionMode = New-M365DSCConnection -Platform 'Intune' `
         -InboundParameters $PSBoundParameters
 
@@ -176,11 +176,11 @@ function Get-TargetResource
 
         if ($null -eq $protectionPolicy)
         {
-            Write-Verbose -Message "No App Protection Policy with displayName {$DisplayName} was found"
+            Write-Verbose -Message "No App Protection Policy for Windows with displayName {$DisplayName} was found"
             return $nullResult
         }
 
-        Write-Verbose -Message "Found App Protection Policy with displayName {$DisplayName}"
+        Write-Verbose -Message "Found App Protection Policy for Windows with displayName {$DisplayName}"
         return @{
             DisplayName                            = $protectionPolicy.displayName
             Description                            = $protectionPolicy.description
@@ -401,7 +401,7 @@ function Set-TargetResource
     $data.Add("Principal", $GlobalAdminAccount.UserName)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
-    Write-Verbose -Message "Intune App Protection Policy {$DisplayName}"
+    Write-Verbose -Message "Intune App Protection Policy for Windows {$DisplayName}"
 
     $ConnectionMode = New-M365DSCConnection -Platform 'Intune' `
         -InboundParameters $PSBoundParameters
@@ -410,26 +410,28 @@ function Set-TargetResource
 
     if ($Ensure -eq 'Present' -and $currentconfigPolicy.Ensure -eq 'Absent')
     {
-        Write-Verbose -Message "Creating new Intune App Protection Policy {$DisplayName}"
         $NewParams = $PSBoundParameters
         $NewParams.Remove("GlobalAdminAccount") | Out-Null
         $NewParams.Remove("Ensure") | Out-Null
+        $NewParams.Add("ODataType", "#microsoft.graph.windowsInformationProtectionPolicy")
+        Write-Verbose -Message "Creating new Intune App Protection Policy for Windows{$DisplayName} with values $(Convert-M365DscHashtableToString -Hashtable $NewParams)"
         New-IntuneAppProtectionPolicy @NewParams
     }
     elseif ($Ensure -eq 'Present' -and $currentconfigPolicy.Ensure -eq 'Present')
     {
-        Write-Verbose -Message "Updating Intune App Configuration Policy {$DisplayName}"
         $UpdateParams = $PSBoundParameters
         $UpdateParams.Remove("GlobalAdminAccount") | Out-Null
         $UpdateParams.Remove("Ensure") | Out-Null
         $protectionPolicy = Get-IntuneAppProtectionPolicy -Filter "displayName eq '$DisplayName'" `
             -ErrorAction Stop
         $UpdateParams.Add("managedAppPolicyId", $protectionPolicy.id)
+
+        Write-Verbose -Message "Updating Intune App Protection Policy {$DisplayName} with values $(Convert-M365DscHashtableToString -Hashtable $UpdateParams)"
         Update-IntuneAppProtectionPolicy @UpdateParams
     }
     elseif ($Ensure -eq 'Absent' -and $currentconfigPolicy.Ensure -eq 'Present')
     {
-        Write-Verbose -Message "Removing Intune App Configuration Policy {$DisplayName}"
+        Write-Verbose -Message "Removing Intune App Configuration Policy for Windows {$DisplayName}"
         $protectionPolicy = Get-IntuneAppProtectionPolicy -Filter "displayName eq '$DisplayName'" `
             -ErrorAction Stop
         Remove-IntuneAppProtectionPolicy -managedAppPolicyId $protectionPolicy.id
@@ -600,7 +602,7 @@ function Test-TargetResource
     $data.Add("TenantId", $TenantId)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
-    Write-Verbose -Message "Testing configuration of Intune App Protection Policy {$DisplayName}"
+    Write-Verbose -Message "Testing configuration of Intune App Protection Policy for Windows {$DisplayName}"
 
     $CurrentValues = Get-TargetResource @PSBoundParameters
 
@@ -658,7 +660,7 @@ function Export-TargetResource
             }
             $result = Get-TargetResource @params
             $result.GlobalAdminAccount = Resolve-Credentials -UserName "globaladmin"
-            $content += "        IntuneAppProtectionPolicy " + (New-Guid).ToString() + "`r`n"
+            $content += "        IntuneAppProtectionPolicyWindows " + (New-Guid).ToString() + "`r`n"
             $content += "        {`r`n"
             $currentDSCBlock = Get-DSCBlock -Params $result -ModulePath $PSScriptRoot
             $content += Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GlobalAdminAccount"

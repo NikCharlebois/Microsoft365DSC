@@ -1,5 +1,5 @@
-[ClassVersion("1.0.0.0"), FriendlyName("IntuneAppProtectionPolicy")]
-class MSFT_IntuneAppProtectionPolicy : OMI_BaseResource
+[ClassVersion("1.0.0.0"), FriendlyName("IntuneAppProtectionPolicyWindows")]
+class MSFT_IntuneAppProtectionPolicyWindows : OMI_BaseResource
 {
     [Key, Description("Display name of the App Protection Policy")] String DisplayName;
     [Write, Description("Descrption of the App Protection Policy")] String Description;
