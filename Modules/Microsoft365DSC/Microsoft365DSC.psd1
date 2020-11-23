@@ -93,7 +93,15 @@
         },
         @{
             ModuleName      = "MSCloudLoginAssistant"
-            RequiredVersion = "1.0.41"
+            RequiredVersion = "1.0.42"
+        },
+        @{
+            ModuleName      = "MicrosoftTeams"
+            RequiredVersion = "1.1.6"
+        },
+        @{
+            ModuleName      = "MSCloudLoginAssistant"
+            RequiredVersion = "1.0.42"
         },
         @{
             ModuleName      = "ReverseDSC"
