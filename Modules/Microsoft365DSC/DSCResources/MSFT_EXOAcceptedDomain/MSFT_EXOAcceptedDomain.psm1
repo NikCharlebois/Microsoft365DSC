@@ -10,7 +10,7 @@ function Get-TargetResource
         $Identity,
 
         [Parameter()]
-        [ValidateSet('Authoritative','InternalRelay')]
+        [ValidateSet('Authoritative', 'InternalRelay')]
         [System.String]
         $DomainType = 'Authoritative',
 
@@ -92,10 +92,10 @@ function Get-TargetResource
             Write-Verbose -Message "AcceptedDomain configuration for $($Identity) does not exist."
 
             # Check to see if $Identity matches a verified domain in the O365 Tenant
-            $ConnectionMode = New-M365DSCConnection -Platform 'AzureAd' `
-            -InboundParameters $PSBoundParameters
+            $ConnectionMode = New-M365DSCConnection -Platform 'MicrosoftGraph' `
+                -InboundParameters $PSBoundParameters
 
-            $VerifiedDomains = Get-AzureADDomain | Where-Object -FilterScript { $_.IsVerified }
+            $VerifiedDomains = Get-MgDomain | Where-Object -FilterScript { $_.IsVerified }
             $MatchingVerifiedDomain = $VerifiedDomains | Where-Object -FilterScript { $_.Name -eq $Identity }
 
             if ($null -ne $MatchingVerifiedDomain)
@@ -178,7 +178,7 @@ function Set-TargetResource
         $Identity,
 
         [Parameter()]
-        [ValidateSet('Authoritative','InternalRelay')]
+        [ValidateSet('Authoritative', 'InternalRelay')]
         [System.String]
         $DomainType = 'Authoritative',
 
@@ -260,7 +260,7 @@ function Test-TargetResource
         $Identity,
 
         [Parameter()]
-        [ValidateSet('Authoritative','InternalRelay')]
+        [ValidateSet('Authoritative', 'InternalRelay')]
         [System.String]
         $DomainType = 'Authoritative',
 
@@ -388,11 +388,11 @@ function Export-TargetResource
         }
         else
         {
-            Write-Host "`r`n" -NoNewLine
+            Write-Host "`r`n" -NoNewline
         }
         foreach ($domain in $AllAcceptedDomains)
         {
-            Write-Host "    |---[$i/$($AllAcceptedDomains.Count)] $($domain.Identity)" -NoNewLine
+            Write-Host "    |---[$i/$($AllAcceptedDomains.Count)] $($domain.Identity)" -NoNewline
 
             $Params = @{
                 Identity              = $domain.Identity
