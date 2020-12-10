@@ -6,6 +6,8 @@ class MSFT_AADMSGroup : OMI_BaseResource
     [Write, Description("Specifies an ID for the group.")] String Id;
     [Write, Description("Specifies that the group is a dynamic group. To create a dynamic group, specify a value of DynamicMembership.")] String GroupTypes[];
     [Write, Description("Specifies the membership rule for a dynamic group.")] String MembershipRule;
+    [Write, Description("List of members for the group by User Principal Names.")] String Members[];
+    [Write, Description("List of owners for the group by User Principal Names.")] String Owners[];
     [Write, Description("Specifies the rule processing state. The acceptable values for this parameter are: On. Process the group rule or Paused. Stop processing the group rule."), ValueMap{"On","Paused"}, Values{"On","Paused"}] String MembershipRuleProcessingState;
     [Write, Description("Specifies whether the group is security enabled. For security groups, this value must be $True.")] Boolean SecurityEnabled;
     [Write, Description("Specifies whether this group is mail enabled. Currently, you cannot create mail enabled groups in Azure AD.")] Boolean MailEnabled;

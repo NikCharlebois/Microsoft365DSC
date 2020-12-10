@@ -25,6 +25,14 @@ function Get-TargetResource
         $MembershipRule,
 
         [Parameter()]
+        [System.String[]]
+        $Members,
+
+        [Parameter()]
+        [System.String[]]
+        $Owners,
+
+        [Parameter()]
         [ValidateSet('On', 'Paused')]
         [System.String]
         $MembershipRuleProcessingState,
@@ -123,12 +131,30 @@ function Get-TargetResource
         {
             Write-Verbose -Message "Found existing AzureAD Group"
 
+            # List members by UPN
+            $groupMembers = Get-AzureADGroupMember -ObjectId $Group.Id
+            $membersValues = @()
+            foreach ($member in $groupMembers)
+            {
+                $membersValues += $member.UserPrincipalName
+            }
+
+            # List owners by UPN
+            $groupOwners = Get-AzureADGroupOwner -ObjectId $Group.Id
+            $ownersValues = @()
+            foreach ($owner in $groupOwners)
+            {
+                $ownersValues += $owner.UserPrincipalName
+            }
+
             $result = @{
                 DisplayName                   = $Group.DisplayName
                 Id                            = $Group.Id
                 Description                   = $Group.Description
                 GroupTypes                    = [System.String[]]$Group.GroupTypes
                 MembershipRule                = $Group.MembershipRule
+                Members                       = $membersValues
+                Owners                        = $ownersValues
                 MembershipRuleProcessingState = $Group.MembershipRuleProcessingState
                 SecurityEnabled               = $Group.SecurityEnabled
                 MailEnabled                   = $Group.MailEnabled
@@ -197,6 +223,14 @@ function Set-TargetResource
         $MembershipRule,
 
         [Parameter()]
+        [System.String[]]
+        $Members,
+
+        [Parameter()]
+        [System.String[]]
+        $Owners,
+
+        [Parameter()]
         [ValidateSet('On', 'Paused')]
         [System.String]
         $MembershipRuleProcessingState,
@@ -256,12 +290,16 @@ function Set-TargetResource
     #endregion
 
     $currentGroup = Get-TargetResource @PSBoundParameters
+    $AllMembers = $Members
+    $AllOwners = $Owners
     $currentParameters = $PSBoundParameters
-    $currentParameters.Remove("ApplicationId")
-    $currentParameters.Remove("TenantId")
-    $currentParameters.Remove("CertificateThumbprint")
-    $currentParameters.Remove("GlobalAdminAccount")
-    $currentParameters.Remove("Ensure")
+    $currentParameters.Remove("ApplicationId") | Out-Null
+    $currentParameters.Remove("TenantId") | Out-Null
+    $currentParameters.Remove("CertificateThumbprint") | Out-Null
+    $currentParameters.Remove("GlobalAdminAccount") | Out-Null
+    $currentParameters.Remove("Ensure") | Out-Null
+    $currentParameters.Remove("Members") | Out-Null
+    $currentParameters.Remove("Owners") | Out-Null
 
     if ($Ensure -eq 'Present' -and $GroupTypes.Contains("Unified") -and $MailEnabled -eq $false)
     {
@@ -297,10 +335,42 @@ function Set-TargetResource
         $currentParameters.Remove("Id")
         try
         {
-            New-AzureADMSGroup @currentParameters
+            $group = New-AzureADMSGroup @currentParameters
+            Write-Verbose -Message "Created new group with Id {$($group.Id)}"
+
+            # Make sure the group is fully created before attempting to assign members and owners
+            $createdGroup = $null
+            $i = 1
+            while ($null -eq $createdGroup -and $i -lt 20)
+            {
+                Start-Sleep -Seconds 1
+                try
+                {
+                    $createdGroup = Get-AzureADGroup -ObjectId $group.Id -ErrorAction Stop
+                }
+                catch
+                {
+                    Write-Verbose -Message "Group not ready. Waited for {$i seconds}"
+                    $i++
+                }
+            }
+
+            foreach ($member in $AllMembers)
+            {
+                $userObject = Get-AzureADUser -ObjectId $member
+                Write-Verbose -Message "Adding Member {$member}"
+                Add-AzureADGroupMember -ObjectId $group.Id -RefObjectId $userObject.ObjectId
+            }
+            foreach ($owner in $AllOwners)
+            {
+                Write-Verbose -Message "Adding Owner {$owner}"
+                $userObject = Get-AzureADUser -ObjectId $owner
+                Add-AzureADGroupOwner -ObjectId $group.Id -RefObjectId $userObject.ObjectId
+            }
         }
         catch
         {
+            Write-Verbose -Message $_
             New-M365DSCLogEntry -Error $_ -Message "Couldn't create group $DisplayName" -Source $MyInvocation.MyCommand.ModuleName
         }
     }
@@ -342,6 +412,14 @@ function Test-TargetResource
         [Parameter()]
         [System.String]
         $MembershipRule,
+
+        [Parameter()]
+        [System.String[]]
+        $Members,
+
+        [Parameter()]
+        [System.String[]]
+        $Owners,
 
         [Parameter()]
         [ValidateSet('On', 'Paused')]
