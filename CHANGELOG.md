@@ -2,6 +2,14 @@
 
 # 1.22.126.1
 
+* TeamsCallingPolicy
+  * Added support for policy assignments;
+* TeamsTenantDialPlan
+  * Fixed an issue where the Export only extracted the first
+    normalization rule.
+    FIXES #1695
+* TeamsUpgradePolicy
+  * Improved performance by leveraging filter queries for Global policy;
 * DEPENDENCIES
   * Updated all Microsoft.Graph * to 1.9.2;
   * Updated Microsoft.Teams to version 3.1.0;

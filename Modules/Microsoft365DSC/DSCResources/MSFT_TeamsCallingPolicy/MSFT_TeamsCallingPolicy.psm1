@@ -84,6 +84,10 @@ function Get-TargetResource
         $SpamFilteringEnabledType = 'Enabled',
 
         [Parameter()]
+        [System.String[]]
+        $Users,
+
+        [Parameter()]
         [ValidateSet("Present", "Absent")]
         [System.String]
         $Ensure = "Present",
@@ -123,6 +127,16 @@ function Get-TargetResource
             return $nullReturn
         }
         Write-Verbose -Message "Found Teams Calling Policy {$Identity}"
+
+        Write-Verbose -Message "Retrieving Users currently assigned to Calling Policy {$Identity}"
+        $assignedUsers = Get-CSOnlineUser -Filter "TeamsCallingPolicy -eq '$Identity'" -ErrorAction SilentlyContinue
+
+        $membersValue = @()
+        foreach ($user in $assignedUsers)
+        {
+            $membersValue += $user.UserPrincipalName
+        }
+
         return @{
             Identity                          = $Identity
             AllowPrivateCalling               = $policy.AllowPrivateCalling
@@ -142,8 +156,9 @@ function Get-TargetResource
             LiveCaptionsEnabledTypeForCalling = $policy.LiveCaptionsEnabledTypeForCalling
             AutoAnswerEnabledType             = $policy.AutoAnswerEnabledType
             SpamFilteringEnabledType          = $policy.SpamFilteringEnabledType
+            Users                             = $membersValue
             Ensure                            = 'Present'
-            Credential                = $Credential
+            Credential                        = $Credential
         }
     }
     catch
@@ -257,6 +272,10 @@ function Set-TargetResource
         $SpamFilteringEnabledType = 'Enabled',
 
         [Parameter()]
+        [System.String[]]
+        $Users,
+
+        [Parameter()]
         [ValidateSet("Present", "Absent")]
         [System.String]
         $Ensure = "Present",
@@ -289,10 +308,12 @@ function Set-TargetResource
     $SetParameters.Remove("Ensure") | Out-Null
     $SetParameters.Remove("Credential") | Out-Null
 
+    $updateMembership = $false
     if ($Ensure -eq 'Present' -and $CurrentValues.Ensure -eq 'Absent')
     {
         Write-Verbose -Message "Creating a new Teams Calling Policy {$Identity}"
         New-CsTeamsCallingPolicy @SetParameters
+        $updateMembership = $true
     }
     elseif ($Ensure -eq 'Present' -and $CurrentValues.Ensure -eq 'Present')
     {
@@ -300,11 +321,35 @@ function Set-TargetResource
         # into the Set-CsTeamsCallingPolicy cmdlet.
         Write-Verbose -Message "Updating settings for Teams Calling Policy {$Identity}"
         Set-CsTeamsCallingPolicy @SetParameters
+        $updateMembership = $true
     }
     elseif ($Ensure -eq 'Absent' -and $CurrentValues.Ensure -eq 'Present')
     {
         Write-Verbose -Message "Removing existing Teams Calling Policy {$Identity}"
         Remove-CsTeamsCallingPolicy -Identity $Identity -Confirm:$false
+    }
+
+    if ($updateMembership)
+    {
+        Write-Verbose -Message "Updating users assigned to calling policy {$Identity}"
+
+        $desired = $Users
+        $current = $CurrentValues.Users
+        $difference = Compare-Object -ReferenceObject $desired -DifferenceObject $current
+
+        foreach ($user in $difference)
+        {
+            if ($user.SideIndicator -eq '=>')
+            {
+                Write-Verbose -Message "Unassigning user {$($user.InputObject)} from calling policy {$Identity}"
+                Grant-CsTeamsCallingPolicy $user.InputObject -PolicyName $null
+            }
+            elseif ($user.SideIndicator -eq '<=')
+            {
+                Write-Verbose -Message "Assigning user {$($user.InputObject)} to calling policy {$Identity}"
+                Grant-CsTeamsCallingPolicy $user.InputObject -PolicyName $Identity
+            }
+        }
     }
 }
 
@@ -392,6 +437,10 @@ function Test-TargetResource
         [System.String]
         [ValidateSet('Enabled', 'Disabled')]
         $SpamFilteringEnabledType = 'Enabled',
+
+        [Parameter()]
+        [System.String[]]
+        $Users,
 
         [Parameter()]
         [ValidateSet("Present", "Absent")]
