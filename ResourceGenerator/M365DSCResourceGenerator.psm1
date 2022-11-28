@@ -117,21 +117,6 @@ function Get-CmdletDefinition
 
     return $cmdletDefinition
 }
-function Get-PropertiesDefinition
-{
-    param (
-        [Parameter()]
-        [ValidateSet('v1.0', 'beta')]
-        [string]
-        $APIVersion
-    )
-
-    $Uri = "https://graph.microsoft.com/$APIVersion/deviceManagement/settingDefinitions"
-    $settingDefinitions = Invoke-MgGraphRequest -Method GET -Uri $Uri
-
-
-    return $settingDefinitions.value
-}
 function Get-DerivedType
 {
     param (
@@ -139,15 +124,25 @@ function Get-DerivedType
         $CmdletDefinition,
 
         [Parameter(Mandatory = $true)]
-        [string]
-        $Entity
+        [System.String]
+        $Entity,
+
+        [Parameter()]
+        [System.Collections.Hashtable]
+        $SelectionFilter
     )
 
     $enumTypes = $CmdletDefinition | Where-Object -FilterScript { $_.ItemType -eq 'EnumType' }
     $complexTypes = $CmdletDefinition | Where-Object -FilterScript { $_.ItemType -eq 'complexType' }
 
-    $returnValue = $CmdletDefinition | Where-Object -FilterScript { $_.BaseType -eq $Entity }
-    # Multiple Result
+    if ($SelectionFilter.AdditionalPropertiesType.IsPresent)
+    {
+        $returnValue = $CmdletDefinition | Where-Object -FilterScript { $_.Name -eq $AdditionalPropertiesType }
+    }
+    if ($null -eq $returnValue)
+    {
+        $returnValue = $CmdletDefinition | Where-Object -FilterScript { $_.BaseType -eq $Entity }
+    }
 
     if ($null -eq $returnValue)
     {
@@ -412,45 +407,55 @@ function Get-ParameterBlockInformation
         if ($type)
         {
             $parameterType = Get-M365DSCDRGParameterType -Type $type
-        }
-        #}
 
-        $parameterName = $property.Name
-        $parameterNameFirstLetter = $parameterName.Substring(0, 1)
-        $parameterNameFirstLetter = $parameterNameFirstLetter.ToUpper()
-        $parameterNameCamelCaseString = $parameterName.Substring(1)
-        $parameterName = "$($parameterNameFirstLetter)$($parameterNameCamelCaseString)"
-        $parameterDescription = ($PropertiesDefinitions | Where-Object -FilterScript { $_.id -like "*$parameterName" }).description
-        if (-not [String]::IsNullOrEmpty($parameterDescription))
-        {
-
-            $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x201C), "'"
-            $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x201D), "'"
-            $parameterDescription = $parameterDescription -replace [regex]::Escape('"'), "'"
-            $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x2019), "'"
-            $parameterDescription = $parameterDescription.TrimStart()
-            $parameterDescription = $parameterDescription.TrimEnd()
         }
 
-        if ($parameterType)
+        if ($parameterType -eq '[INVALID]')
         {
-            $myParam = @{
-                IsMandatory = $isMandatory
-                Attribute   = $parameterAttribute
-                Type        = $parameterType
-                Name        = $parameterName
-                Description = $parameterDescription
-            }
-            if ($null -ne $property.Members -and $property.Members.count -gt 0)
+            if (-not $Global:ParametersToSkip.Contains($property.Name))
             {
-                $myParam.add('Members', $property.Members)
+                $Global:ParametersToSkip += $property.Name
             }
-            if ($null -ne $property.Properties -and $property.Properties.count -gt 0)
+        }
+        else
+        {
+            $parameterName = $property.Name
+            $parameterNameFirstLetter = $parameterName.Substring(0, 1)
+            $parameterNameFirstLetter = $parameterNameFirstLetter.ToUpper()
+            $parameterNameCamelCaseString = $parameterName.Substring(1)
+            $parameterName = "$($parameterNameFirstLetter)$($parameterNameCamelCaseString)"
+            $parameterDescription = ($PropertiesDefinitions | Where-Object -FilterScript { $_.id -like "*$parameterName" }).description
+            if (-not [String]::IsNullOrEmpty($parameterDescription))
             {
-                $myParam.add('Properties', $property.Properties)
+
+                $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x201C), "'"
+                $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x201D), "'"
+                $parameterDescription = $parameterDescription -replace [regex]::Escape('"'), "'"
+                $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x2019), "'"
+                $parameterDescription = $parameterDescription.TrimStart()
+                $parameterDescription = $parameterDescription.TrimEnd()
             }
 
-            $parameterBlock.Add($myParam) | Out-Null
+            if ($parameterType)
+            {
+                $myParam = @{
+                    IsMandatory = $isMandatory
+                    Attribute   = $parameterAttribute
+                    Type        = $parameterType
+                    Name        = $parameterName
+                    Description = $parameterDescription
+                }
+                if ($null -ne $property.Members -and $property.Members.count -gt 0)
+                {
+                    $myParam.add('Members', $property.Members)
+                }
+                if ($null -ne $property.Properties -and $property.Properties.count -gt 0)
+                {
+                    $myParam.add('Properties', $property.Properties)
+                }
+
+                $parameterBlock.Add($myParam) | Out-Null
+            }
         }
     }
     return $parameterBlock
@@ -467,6 +472,11 @@ function Get-M365DSCDRGParameterType
     switch -Wildcard ($Type.ToLower())
     {
         'system.string'
+        {
+            $parameterType = 'System.String'
+            break;
+        }
+        'system.binary'
         {
             $parameterType = 'System.String'
             break;
@@ -501,6 +511,11 @@ function Get-M365DSCDRGParameterType
             $parameterType = 'System.String[]'
             break;
         }
+        'system.timeofday'
+        {
+            $parameterType = 'System.String'
+            break;
+        }
         'system.*'
         {
             $parameterType = $_
@@ -524,7 +539,7 @@ function Get-M365DSCDRGParameterType
         }
         Default
         {
-            $parameterType = $_
+            $parameterType = '[INVALID]'
         }
     }
     return $parameterType
@@ -620,8 +635,7 @@ function Get-M365DSCFakeValues
 
         [Parameter()]
         [System.String]
-        $Workload
-
+        $ResourceName
     )
 
     $result = @{}
@@ -715,7 +729,7 @@ function Get-M365DSCFakeValues
                     $propertyType = $parameter.Type -replace 'microsoft.graph.powershell.models.', ''
                     $propertyType = $propertyType -replace 'imicrosoftgraph', ''
                     $propertyType = $propertyType -replace '[[\]]', ''
-                    $propertyType = $workload + $propertyType
+                    $propertyType = $ResourceName + $propertyType
                     $propertyType = "MSFT_$propertyType"
                     $hashValue.add('CIMType', $propertyType)
                 }
@@ -724,7 +738,7 @@ function Get-M365DSCFakeValues
                 if ($Null -ne $parameter.Properties)
                 {
                     $nestedProperties = Get-M365DSCFakeValues -ParametersInformation $parameter.Properties `
-                        -Workload $Workload `
+                        -ResourceName $ResourceName `
                         -isCmdletCall $isCmdletCall `
                         -isRecursive $true
 
@@ -958,17 +972,17 @@ function New-M365DSCResource
         # Path to the new Resource
         [Parameter()]
         [System.String]
-        $Path = 'c:\temp\newresource',
+        $Path = 'c:\temp\',
 
         # Path to the new Resource
         [Parameter()]
         [System.String]
-        $UnitTestPath = 'c:\temp\newresource',
+        $UnitTestPath = 'c:\temp\',
 
         # Path to the new Resource
         [Parameter()]
         [System.String]
-        $ExampleFilePath = 'c:\temp\newresource',
+        $ExampleFilePath = 'c:\temp',
 
         [Parameter()]
         [ValidateSet('v1.0', 'beta')]
@@ -980,14 +994,15 @@ function New-M365DSCResource
         $ParametersToSkip = @(),
 
         [Parameter()]
-        [System.String]
-        $AdditionalPropertiesType,
+        [System.Collections.Hashtable]
+        $SelectionFilter,
 
         [Parameter()]
         [System.Management.Automation.PSCredential]
         $Credential
     )
     $Global:CIMInstancesAlreadyFound = @()
+    $Global:ParametersToSkip = $ParametersToSkip
     $GetcmdletName = "Get-$GraphModuleCmdletNoun"
     $commandDetails = Find-MgGraphCommand -Command $GetcmdletName -ApiVersion $ApiVersion -ErrorAction SilentlyContinue
     $cmdletFound = Get-Command $GetcmdletName -ErrorAction SilentlyContinue
@@ -1057,13 +1072,14 @@ function New-M365DSCResource
 
     $propertiesDefinitions = @()
 
-
-    $typeInformation = Get-DerivedType -CmdletDefinition $cmdletDefinition -Entity $actualType
+    $typeInformation = Get-DerivedType -CmdletDefinition $cmdletDefinition `
+        -Entity $actualType `
+        -SelectionFilter $SelectionFilter
 
     #write-host ($typeInformation|out-string)
     if ($typeInformation.GetType().BaseType.Name -eq 'Array')
     {
-        if ([String]::IsNullOrEmpty($AdditionalPropertiesType))
+        if ([String]::IsNullOrEmpty($SelectionFilter.AdditionalPropertiesType))
         {
             $typeInformationChoices = @()
             for ($i = 0; $i -lt $typeInformation.Count; $i++)
@@ -1077,10 +1093,9 @@ function New-M365DSCResource
         }
         else
         {
-            $selectedODataType = $typeInformation | Where-Object -FilterScript { $_.Name -eq $AdditionalPropertiesType }
+            $selectedODataType = $typeInformation | Where-Object -FilterScript { $_.Name -eq $SelectionFilter.AdditionalPropertiesType }
         }
 
-        #write-host ($selectedODataType | out-string)
         $isAdditionalProperty = $true
     }
     else
@@ -1088,13 +1103,13 @@ function New-M365DSCResource
         $selectedODataType = $typeInformation
         $isAdditionalProperty = $false
     }
-    #$selectedODataType.Properties|fl *
+
     $addIntuneAssignments = $false
     $AssignmentsParam = ''
     $AssignmentsGet = ''
     $AssignmentsRemove = ''
-    $AssignmentsNew = ''
-    $AssignmentsUpdate = ''
+    $AssignmentsSet = ''
+    $AssignmentsSet = ''
     $AssignmentsFunctions = ''
     $AssignmentsCIM = ''
     $AssignmentsProperty = ''
@@ -1112,10 +1127,16 @@ function New-M365DSCResource
                 $repository = 'deviceConfigurations'
             }
         }
-
     }
 
-    $propertiesDefinitions = Get-PropertiesDefinition -APIVersion $ApiVersion
+    # Remove the version property which is read-only
+    if ($Workload -in ('Intune', 'MicrosoftGraph') -and 'Version' -in $selectedODataType.Properties.Name)
+    {
+        $ParametersToSkip += 'Version'
+    }
+
+    select-mgprofile beta
+    $propertiesDefinitions = Get-MgDeviceManagementSettingDefinition
     $PropertiesDefinitions = $PropertiesDefinitions | Where-Object -FilterScript { $_.id -like "*$($selectedODataType.Name)*" }
     $typeProperties = $selectedODataType.Properties | Where-Object -FilterScript { $_.Name -notin $ParametersToSkip }
     #$typeProperties
@@ -1146,7 +1167,7 @@ function New-M365DSCResource
     if ($CimInstances)
     {
         $CimInstancesSchemaContent = Get-M365DSCDRGCimInstancesSchemaStringContent -CIMInstances $CimInstances `
-            -Workload $Workload
+            -ResourceName $ResourceName
     }
 
     $parameterString = Get-ParameterBlockStringForModule -ParameterBlockInformation $parameterInformation
@@ -1157,7 +1178,7 @@ function New-M365DSCResource
     $hashTableMapping = $hashtableResults.StringContent
 
     #region UnitTests
-    $fakeValues = Get-M365DSCFakeValues -ParametersInformation $parameterInformation -IntroduceDrift $false -Workload $Workload
+    $fakeValues = Get-M365DSCFakeValues -ParametersInformation $parameterInformation -IntroduceDrift $false -ResourceName $ResourceName
     #Write-Host($fakeValues|out-string)
     $fakeValuesString = Get-M365DSCHashAsString -Values $fakeValues
     Write-TokenReplacement -Token '<FakeValues>' -value $fakeValuesString -FilePath $unitTestPath
@@ -1167,8 +1188,8 @@ function New-M365DSCResource
         $fakeValues2 = Get-M365DSCFakeValues -ParametersInformation $parameterInformation `
             -IntroduceDrift $false `
             -isCmdletCall $true `
-            -AdditionalPropertiesType $AdditionalPropertiesType `
-            -Workload $Workload
+            -AdditionalPropertiesType $SelectionFilter.AdditionalPropertiesType `
+            -ResourceName $ResourceName
     }
     $fakeValuesString2 = Get-M365DSCHashAsString -Values $fakeValues2 -isCmdletCall $true
     Write-TokenReplacement -Token '<FakeValues2>' -value $fakeValuesString2 -FilePath $unitTestPath
@@ -1176,8 +1197,8 @@ function New-M365DSCResource
     $fakeDriftValues = Get-M365DSCFakeValues -ParametersInformation $parameterInformation `
         -IntroduceDrift $true `
         -isCmdletCall $true `
-        -AdditionalPropertiesType $AdditionalPropertiesType `
-        -Workload $Workload
+        -AdditionalPropertiesType $SelectionFilter.AdditionalPropertiesType `
+        -ResourceName $ResourceName
     $fakeDriftValuesString = Get-M365DSCHashAsString -Values $fakeDriftValues -isCmdletCall $true
     Write-TokenReplacement -Token '<DriftValues>' -value $fakeDriftValuesString -FilePath $unitTestPath
     Write-TokenReplacement -Token '<ResourceName>' -value $ResourceName -FilePath $unitTestPath
@@ -1217,13 +1238,18 @@ function New-M365DSCResource
     Write-TokenReplacement -Token '<ResourceDescription>' -Value $resourceDescription -FilePath $readmeFilePath
 
     $getCmdlet = Get-Command -Name "Get-$($GraphModuleCmdLetNoun)" -Module $GraphModule
-    $getDefaultParameterSet = $getCmdlet.ParameterSets | Where-Object -FilterScript { $_.Name -eq 'Get'}
+    [Array]$getDefaultParameterSet = $getCmdlet.ParameterSets | Where-Object -FilterScript { $_.Name -like 'Get*'}
+    $getDefaultParameterSet = $getDefaultParameterSet[0]
     $getKeyIdentifier = ($getDefaultParameterSet.Parameters | Where-Object -FilterScript { $_.IsMandatory }).Name
     if([String]::isNullOrEmpty($getKeyIdentifier))
     {
-        $getKeyIdentifier=$typeProperties[0].Name
+        $getKeyIdentifier = $typeProperties[0].Name
     }
-
+    if ($typeProperties.Name.ToLower().Contains("displayname"))
+    {
+        $SecondaryKey = 'DisplayName'
+        Write-TokenReplacement -Token '<SecondaryKey>' -Value $SecondaryKey  -FilePath $moduleFilePath
+    }
     Write-TokenReplacement -Token '<ParameterBlock>' -Value $parameterString -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<PrimaryKey>' -Value $typeProperties[0].Name  -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<getKeyIdentifier>' -Value $getKeyIdentifier  -FilePath $moduleFilePath
@@ -1234,17 +1260,27 @@ function New-M365DSCResource
     Write-TokenReplacement -Token '<RemoveCmdLetName>' -Value "Remove-$($GraphModuleCmdLetNoun)" -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<ODataType>' -Value $selectedODataType.Name -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<additionalProperties>' -Value $hashtableResults.addtionalProperties -FilePath $moduleFilePath
-
-
     Write-TokenReplacement -Token '<FilterScript>' -Value 'DisplayName' -FilePath $moduleFilePath
-    Write-TokenReplacement -Token '<FilterScriptShort>' -Value "`$_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.$($selectedODataType.Name)' " -FilePath $moduleFilePath
+
+    $SelectionFilterStatement = $null
+    if ($null -ne $SelectionFilter.AdditionalPropertiesType)
+    {
+        $SelectionFilterStatement = "`$_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.$($selectedODataType.Name)' "
+    }
+    elseif ($null -ne $SelectionFilter.TemplateReference)
+    {
+        $SelectionFilterStatement = "`$_.TemplateReference.TemplateFamily -eq '$($SelectionFilter.TemplateReference)' "
+    }
+    Write-TokenReplacement -Token '<FilterScriptShort>' -Value $SelectionFilterStatement -FilePath $moduleFilePath
+
     $NonIntuneResource = ''
     if (-not $isAdditionalProperty)
     {
         $NonIntuneResource = @"
         if (-not `$getValue)
         {
-            [array]`$getValue = Get-$GraphModuleCmdLetNoun `
+            [array]`$getValue = Get-$GraphModuleCmdLetNoun ``
+                -All ``
                 -ErrorAction Stop
         }
 "@
@@ -1268,15 +1304,43 @@ function New-M365DSCResource
         $AssignmentsParam += "        [Microsoft.Management.Infrastructure.CimInstance[]]`r`n"
         $AssignmentsParam += "        `$Assignments,`r`n"
 
-        $AssignmentsGet += "        `$assignmentsValues=Get-$($GraphModuleCmdLetNoun)Assignment -$($UpdateKeyIdentifier.Name) `$getValue.Id`r`n"
+        $AssignmentsGet += "        `$assignmentsValues = Get-$($GraphModuleCmdLetNoun)Assignment -$($UpdateKeyIdentifier.Name) `$getValue.Id`r`n"
         $AssignmentsGet += "        `$assignmentResult = @()`r`n"
         $AssignmentsGet += "        foreach (`$assignmentEntry in `$AssignmentsValues)`r`n"
         $AssignmentsGet += "        {`r`n"
+        $AssignmentsGet += "            `$groupName = `$null`r`n"
+        $AssignmentsGet += "            `$groupIdValue = `$assignmentEntry.Id.Split('_')[1]`r`n"
+        $AssignmentsGet += "            if (`$groupIdValue -eq 'acacacac-9df4-4c7d-9d50-4ef0226f57a9')`r`n"
+        $AssignmentsGet += "            {`r`n"
+        $AssignmentsGet += "                `$groupName = 'AllUsers'`r`n"
+        $AssignmentsGet += "            }`r`n"
+        $AssignmentsGet += "            elseif (`$groupIdValue -eq 'adadadad-808e-44e2-905a-0b7873a8a531')`r`n"
+        $AssignmentsGet += "            {`r`n"
+        $AssignmentsGet += "                `$groupName = 'AllDevices'`r`n"
+        $AssignmentsGet += "            }`r`n"
+        $AssignmentsGet += "            else`r`n"
+        $AssignmentsGet += "            {`r`n"
+        $AssignmentsGet += "                `$groupInstance = Get-MgGroup -GroupId `$groupIdValue`r`n"
+        $AssignmentsGet += "                if (`$groupInstance)`r`n"
+        $AssignmentsGet += "                {`r`n"
+        $AssignmentsGet += "                    `$groupName = `$groupInstance.DisplayName`r`n"
+        $AssignmentsGet += "                }`r`n"
+        $AssignmentsGet += "            }`r`n"
         $AssignmentsGet += "            `$assignmentValue = @{`r`n"
-        $AssignmentsGet += "                dataType = `$assignmentEntry.Target.AdditionalProperties.'@odata.type'`r`n"
-        $AssignmentsGet += "                deviceAndAppManagementAssignmentFilterType = `$assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterType.ToString()`r`n"
-        $AssignmentsGet += "                deviceAndAppManagementAssignmentFilterId = `$assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterId`r`n"
-        $AssignmentsGet += "                groupId = `$assignmentEntry.Target.AdditionalProperties.groupId`r`n"
+        $AssignmentsGet += "                dataType                                   = `$assignmentEntry.Target.AdditionalProperties.'@odata.type'`r`n"
+        $AssignmentsGet += "                groupId                                    = `$assignmentEntry.Target.AdditionalProperties.groupId`r`n"
+        $AssignmentsGet += "            }`r`n"
+        $AssignmentsGet += "            if (`$assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterType)`r`n"
+        $AssignmentsGet += "            {`r`n"
+        $AssignmentsGet += "                `$assignmentValue.Add('deviceAndAppManagementAssignmentFilterType', `$assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterType.ToString())`r`n"
+        $AssignmentsGet += "            }`r`n"
+        $AssignmentsGet += "            if (`$assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterId)`r`n"
+        $AssignmentsGet += "            {`r`n"
+        $AssignmentsGet += "                `$assignmentValue.Add('deviceAndAppManagementAssignmentFilterId', `$assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterId)`r`n"
+        $AssignmentsGet += "            }`r`n"
+        $AssignmentsGet += "            if (`$groupName)`r`n"
+        $AssignmentsGet += "            {`r`n"
+        $AssignmentsGet += "                `$assignmentValue.Add('GroupName', `$groupName)`r`n"
         $AssignmentsGet += "            }`r`n"
         $AssignmentsGet += "            `$assignmentResult += `$assignmentValue`r`n"
         $AssignmentsGet += "        }`r`n"
@@ -1284,27 +1348,53 @@ function New-M365DSCResource
 
         $AssignmentsRemove += "        `$PSBoundParameters.Remove(`"Assignments`") | Out-Null`r`n"
 
-        $AssignmentsNew += "        `$assignmentsHash=@()`r`n"
-        $AssignmentsNew += "        foreach(`$assignment in `$Assignments)`r`n"
-        $AssignmentsNew += "        {`r`n"
-        $AssignmentsNew += "            `$assignmentsHash+=Get-M365DSCDRGComplexTypeToHashtable -ComplexObject `$Assignment`r`n"
-        $AssignmentsNew += "        }`r`n"
-        $AssignmentsNew += "`r`n"
-        $AssignmentsNew += "        if(`$policy.id)"
-        $AssignmentsNew += "        {`r`n"
-        $AssignmentsNew += "            Update-DeviceConfigurationPolicyAssignment -DeviceConfigurationPolicyId  `$policy.id ```r`n"
-        $AssignmentsNew += "                -Targets `$assignmentsHash ```r`n"
-        $AssignmentsNew += "                -Repository $repository`r`n"
-        $AssignmentsNew += "        }`r`n"
-
-        $AssignmentsUpdate += "        `$assignmentsHash=@()`r`n"
-        $AssignmentsUpdate += "        foreach(`$assignment in `$Assignments)`r`n"
-        $AssignmentsUpdate += "        {`r`n"
-        $AssignmentsUpdate += "            `$assignmentsHash+=Get-M365DSCDRGComplexTypeToHashtable -ComplexObject `$Assignment`r`n"
-        $AssignmentsUpdate += "        }`r`n"
-        $AssignmentsUpdate += "        Update-DeviceConfigurationPolicyAssignment -DeviceConfigurationPolicyId `$currentInstance.id ```r`n"
-        $AssignmentsUpdate += "            -Targets `$assignmentsHash ```r`n"
-        $AssignmentsUpdate += "            -Repository $repository`r`n"
+        $AssignmentsSet += "        `$assignmentsHash = @()`r`n"
+        $AssignmentsSet += "        foreach(`$assignment in `$Assignments)`r`n"
+        $AssignmentsSet += "        {`r`n"
+        $AssignmentsSet += "            `$currentHash = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject `$assignment`r`n"
+        $AssignmentsSet += "            if (`$currentHash.groupId)`r`n"
+        $AssignmentsSet += "            {`r`n"
+        $AssignmentsSet += "                `$groupInstance = Get-MgGroup -GroupId `$currentHash.groupId -ErrorAction 'SilentlyContinue'`r`n"
+        $AssignmentsSet += "                if (-not `$groupInstance -and `$currentHash.groupName)`r`n"
+        $AssignmentsSet += "                {`r`n"
+        $AssignmentsSet += "                    `$groupInstance = Get-MgGroup -Filter `"DisplayName eq '`$(`$currentHash.groupName)'`"`r`n"
+        $AssignmentsSet += "                    if (`$groupInstance) `r`n"
+        $AssignmentsSet += "                    {`r`n"
+        $AssignmentsSet += "                        `$currentHash.groupId = `$groupInstance.Id`r`n"
+        $AssignmentsSet += "                        `$currentHash.Remove('GroupName') | Out-Null`r`n"
+        $AssignmentsSet += "                    }`r`n"
+        $AssignmentsSet += "                }`r`n"
+        $AssignmentsSet += "            }`r`n"
+        $AssignmentsSet += "            `$assignmentsHash += `$currentHash`r`n"
+        $AssignmentsSet += "        }`r`n"
+        $AssignmentsSet += "`r`n"
+        $AssignmentsSet += "        if(`$currentInstance.id)`r`n"
+        $AssignmentsSet += "        {`r`n"
+        $AssignmentsSet += "            Write-Verbose -Message `"Updating Assignments with:``r``n`$(`$assignmentsHash | Out-String)`"`r`n"
+        $AssignmentsSet += "            `$retries = 10`r`n"
+        $AssignmentsSet += "            `$entryUpdated = `$false`r`n"
+        $AssignmentsSet += "            do`r`n"
+        $AssignmentsSet += "            {`r`n"
+        $AssignmentsSet += "                try`r`n"
+        $AssignmentsSet += "                {`r`n"
+        $AssignmentsSet += "                    Update-DeviceConfigurationPolicyAssignment -DeviceConfigurationPolicyId `$currentInstance.id ```r`n"
+        $AssignmentsSet += "                        -Targets `$assignmentsHash ```r`n"
+        $AssignmentsSet += "                        -Repository $repository ```r`n"
+        $AssignmentsSet += "                        -ErrorAction Stop`r`n"
+        $AssignmentsSet += "                    `$entryUpdated = `$true`r`n"
+        $AssignmentsSet += "                }`r`n"
+        $AssignmentsSet += "                catch`r`n"
+        $AssignmentsSet += "                {`r`n"
+        $AssignmentsSet += "                    Write-Verbose -Message `"Failed updating the assignments for {`$(`$currentInstance.id)}. Retrying in 5 second.`"`r`n"
+        $AssignmentsSet += "                    `$retries--`r`n"
+        $AssignmentsSet += "                    Start-Sleep 5`r`n"
+        $AssignmentsSet += "                }`r`n"
+        $AssignmentsSet += "            } while (`$retries -gt 0 -and -not `$entryUpdated)`r`n"
+        $AssignmentsSet += "            if (`$entryUpdated)`r`n"
+        $AssignmentsSet += "            {`r`n"
+        $AssignmentsSet += "                Write-Verbose -Message `"Assignments for {`$(`$currentInstance.id)} were successfully updated.`"`r`n"
+        $AssignmentsSet += "            }`r`n"
+        $AssignmentsSet += "        }`r`n"
 
         $AssignmentsFunctions = @"
 function Update-DeviceConfigurationPolicyAssignment
@@ -1334,39 +1424,36 @@ function Update-DeviceConfigurationPolicyAssignment
     {
         `$deviceManagementPolicyAssignments=@()
 
-        `$Uri="https://graph.microsoft.com/`$APIVersion/deviceManagement/`$Repository/`$DeviceConfigurationPolicyId/assign"
+        `$Uri = "https://graph.microsoft.com/`$APIVersion/deviceManagement/`$Repository/`$DeviceConfigurationPolicyId/assign"
 
-        foreach(`$target in `$targets)
+        foreach (`$target in `$targets)
         {
-            `$formattedTarget=@{"@odata.type"=`$target.dataType}
-            if(`$target.groupId)
+            `$formattedTarget = @{"@odata.type"=`$target.dataType}
+            if (`$target.groupId)
             {
                 `$formattedTarget.Add('groupId',`$target.groupId)
             }
-            if(`$target.collectionId)
+            if (`$target.collectionId)
             {
                 `$formattedTarget.Add('collectionId',`$target.collectionId)
             }
-            if(`$target.deviceAndAppManagementAssignmentFilterType)
+            if (`$target.deviceAndAppManagementAssignmentFilterType)
             {
                 `$formattedTarget.Add('deviceAndAppManagementAssignmentFilterType',`$target.deviceAndAppManagementAssignmentFilterType)
             }
-            if(`$target.deviceAndAppManagementAssignmentFilterId)
+            if (`$target.deviceAndAppManagementAssignmentFilterId)
             {
                 `$formattedTarget.Add('deviceAndAppManagementAssignmentFilterId',`$target.deviceAndAppManagementAssignmentFilterId)
             }
-            `$deviceManagementPolicyAssignments+=@{'target'= `$formattedTarget}
+            `$deviceManagementPolicyAssignments += @{'target'= `$formattedTarget}
         }
-        `$body=@{'assignments'=`$deviceManagementPolicyAssignments}|ConvertTo-Json -Depth 20
-        #write-verbose -Message `$body
+        `$body = @{'assignments' = `$deviceManagementPolicyAssignments}|ConvertTo-Json -Depth 20
         Invoke-MgGraphRequest -Method POST -Uri `$Uri -Body `$body -ErrorAction Stop
-
     }
     catch
     {
         try
         {
-            Write-Verbose -Message `$_
             `$tenantIdValue = ""
             `$tenantIdValue = `$Credential.UserName.Split('@')[1]
             Add-M365DSCEvent -Message `$_ -EntryType 'Error' ``
@@ -1377,60 +1464,82 @@ function Update-DeviceConfigurationPolicyAssignment
         {
             Write-Verbose -Message `$_
         }
-        return `$null
+        throw 'There was an issue trying to update the assignments for {`$DeviceConfigurationPolicyId}'
     }
-
-
 }
 "@
 
-        $AssignmentsCIM = @'
-[ClassVersion("1.0.0.0")]
-class MSFT_DeviceManagementConfigurationPolicyAssignments
+        $AssignmentsCIM = "[ClassVersion(`"1.0.0.0`")]`r`n"
+        $AssignmentsCIM += "class MSFT_$ResourceName" + "Assignments`r`n"
+        $AssignmentsCIM += @'
 {
     [Write, Description("The type of the target assignment."), ValueMap{"#microsoft.graph.groupAssignmentTarget","#microsoft.graph.allLicensedUsersAssignmentTarget","#microsoft.graph.allDevicesAssignmentTarget","#microsoft.graph.exclusionGroupAssignmentTarget","#microsoft.graph.configurationManagerCollectionAssignmentTarget"}, Values{"#microsoft.graph.groupAssignmentTarget","#microsoft.graph.allLicensedUsersAssignmentTarget","#microsoft.graph.allDevicesAssignmentTarget","#microsoft.graph.exclusionGroupAssignmentTarget","#microsoft.graph.configurationManagerCollectionAssignmentTarget"}] String dataType;
     [Write, Description("The type of filter of the target assignment i.e. Exclude or Include. Possible values are:none, include, exclude."), ValueMap{"none","include","exclude"}, Values{"none","include","exclude"}] String deviceAndAppManagementAssignmentFilterType;
     [Write, Description("The Id of the filter for the target assignment.")] String deviceAndAppManagementAssignmentFilterId;
     [Write, Description("The group Id that is the target of the assignment.")] String groupId;
+    [Write, Description("The group's name that is the target of the assignment.")] String GroupName;
     [Write, Description("The collection Id that is the target of the assignment.(ConfigMgr)")] String collectionId;
 };
 '@
-        $AssignmentsProperty = "    [Write, Description(`"Represents the assignment to the Intune policy.`"), EmbeddedInstance(`"MSFT_DeviceManagementConfigurationPolicyAssignments`")] String Assignments[];`r`n"
+        $AssignmentsProperty = "    [Write, Description(`"Represents the assignment to the Intune policy.`"), EmbeddedInstance(`"MSFT_$resourceName" + "Assignments`")] String Assignments[];`r`n"
         $AssignmentsConvertComplexToString = @"
-        if(`$Results.Assignments)
-        {
-            `$complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject `$Results.Assignments -CIMInstanceName DeviceManagementConfigurationPolicyAssignments
-            if (`$complexTypeStringResult)
+            if(`$Results.Assignments)
             {
-                `$Results.Assignments = `$complexTypeStringResult
+"@
+        $AssignmentsConvertComplexToString += "`r`n                `$complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject `$Results.Assignments -CIMInstanceName $ResourceName" + "Assignments`r`n"
+        $AssignmentsConvertComplexToString += @"
+                if (`$complexTypeStringResult)
+                {
+                    `$Results.Assignments = `$complexTypeStringResult
+                }
+                else
+                {
+                    `$Results.Remove('Assignments') | Out-Null
+                }
             }
-            else
-            {
-                `$Results.Remove('Assignments') | Out-Null
-            }
-        }
 "@
         $AssignmentsConvertComplexToVariable = @"
-        if (`$Results.Assignments)
-        {
-            `$isCIMArray=`$false
-            if(`$Results.Assignments.getType().Fullname -like "*[[\]]")
+            if (`$Results.Assignments)
             {
-                `$isCIMArray=`$true
+                `$isCIMArray = `$false
+                if (`$Results.Assignments.getType().Fullname -like "*[[\]]")
+                {
+                    `$isCIMArray = `$true
+                }
+                `$currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock `$currentDSCBlock -ParameterName "Assignments" -isCIMArray:`$isCIMArray
             }
-            `$currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock `$currentDSCBlock -ParameterName "Assignments" -isCIMArray:`$isCIMArray
-        }
 "@
     }
+
+    $CustomUpdateLogicBefore = ""
+    $CustomUpdateLogicAfter  = ""
+    if ($Workload -eq 'Intune')
+    {
+        # If the resource contains a propriety named Priority, we can't call the main update- cmdlet and need to call into a
+        # separate one to update the priority.
+        $CustomUpdateLogicBefore += "        [Array]`$keys = `$UpdateParameters.Keys.ToLower()`r`n"
+        $CustomUpdateLogicBefore += "        if (`$keys.Contains('priority'))`r`n"
+        $CustomUpdateLogicBefore += "        {`r`n"
+        $CustomUpdateLogicBefore += "            Write-Verbose -Message `"Update parameters contain 'Priority'`"`r`n"
+        $CustomUpdateLogicBefore += "            `$PriorityValue = `$UpdateParameters.priority`r`n"
+        $CustomUpdateLogicBefore += "            `$UpdateParameters.Remove('priority') | Out-Null`r`n"
+        $CustomUpdateLogicBefore += "        }`r`n"
+
+        $CustomUpdateLogicAfter += "        #Set-$GraphModuleCmdLetNoun" + "Priority -$($updateKeyIdentifier.Name) `$currentInstance.Id ```r`n"
+        $CustomUpdateLogicAfter += "            #-Priority `$PriorityValue`r`n"
+    }
+
+
     Write-TokenReplacement -Token '<AssignmentsParam>' -Value $AssignmentsParam -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsGet#>' -Value $AssignmentsGet -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsRemove#>' -Value $AssignmentsRemove -FilePath $moduleFilePath
-    Write-TokenReplacement -Token '<#AssignmentsNew#>' -Value $AssignmentsNew -FilePath $moduleFilePath
-    Write-TokenReplacement -Token '<#AssignmentsUpdate#>' -Value $AssignmentsUpdate -FilePath $moduleFilePath
+    Write-TokenReplacement -Token '<#AssignmentsSet#>' -Value $AssignmentsSet -FilePath $moduleFilePath
+    Write-TokenReplacement -Token '<#AssignmentsSet#>' -Value $AssignmentsSet -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsFunctions#>' -Value $AssignmentsFunctions -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsConvertComplexToString#>' -Value $AssignmentsConvertComplexToString -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsConvertComplexToVariable#>' -Value $AssignmentsConvertComplexToVariable -FilePath $moduleFilePath
-
+    Write-TokenReplacement -Token '<#CustomUpdateLogicBefore#>' -Value $CustomUpdateLogicBefore -FilePath $moduleFilePath
+    Write-TokenReplacement -Token '<#CustomUpdateLogicAfter#>' -Value $CustomUpdateLogicAfter -FilePath $moduleFilePath
 
     # Remove comments
     Write-TokenReplacement -Token '<#ResourceGenerator' -Value '' -FilePath $moduleFilePath
@@ -1439,7 +1548,7 @@ class MSFT_DeviceManagementConfigurationPolicyAssignments
 
     $schemaFilePath = New-M365DSCSchemaFile -ResourceName $ResourceName -Path $Path
     $schemaProperties = New-M365SchemaPropertySet -Properties $parameterInformation `
-        -Workload $Workload
+        -ResourceName $ResourceName
 
     Write-TokenReplacement -Token '<AssignmentsCIM>' -Value $AssignmentsCIM -FilePath $schemaFilePath
     Write-TokenReplacement -Token '<AssignmentsProperty>' -Value $AssignmentsProperty -FilePath $schemaFilePath
@@ -1468,7 +1577,7 @@ function Get-M365DSCDRGCimInstancesSchemaStringContent
 
         [Parameter(Mandatory = $true)]
         [System.String]
-        $Workload
+        $ResourceName
     )
 
     $stringResult = ''
@@ -1494,7 +1603,7 @@ function Get-M365DSCDRGCimInstancesSchemaStringContent
                     if ($property.NestedCIM)
                     {
                         $nestedResult = Get-M365DSCDRGCimInstancesSchemaStringContent -CIMInstances $property.NestedCIM `
-                            -Workload $Workload
+                            -ResourceName $ResourceName
                     }
                     else
                     {
@@ -1504,7 +1613,7 @@ function Get-M365DSCDRGCimInstancesSchemaStringContent
                     $propertyType = $property.Type -replace 'microsoft.graph.powershell.models.', ''
                     $propertyType = $propertyType -replace 'imicrosoftgraph', ''
                     $propertyType = $propertyType -replace '[[\]]', ''
-                    $propertyType = $workload + $propertyType
+                    $propertyType = $ResourceName + $propertyType
                     $stringResult += "    [Write, Description(`"$($property.Description)`"), EmbeddedInstance(`"MSFT_$propertyType`")] String $($property.Name)"
                     if ($property.IsArray)
                     {
@@ -1578,8 +1687,6 @@ function Get-M365DSCDRGCimInstances
     $results = @()
     foreach ($cimInstance in $cimInstances)
     {
-
-
         $IsArray = $false
         $currentInstance = @{}
         $originalType = $cimInstance.Type
@@ -1599,7 +1706,7 @@ function Get-M365DSCDRGCimInstances
         }
         $currentInstance.Add('IsArray', $IsArray)
 
-        $cimInstanceName = $Workload + $cimInstanceName
+        $cimInstanceName = $ResourceName + $cimInstanceName
         $currentInstance.Add('Name', $cimInstanceName)
 
         try
@@ -1649,13 +1756,11 @@ function Get-M365DSCDRGCimInstances
             }
         }
 
-
         $propertiesValues = @()
         foreach ($declaredProperty in $declaredProperties)
         {
             if (-not [String]::IsNullOrEmpty($declaredProperty.Name))
             {
-
                 $propertyIsArray = $false
                 $currentProperty = @{}
                 $currentProperty.Add('Name', $declaredProperty.Name)
@@ -1683,15 +1788,16 @@ function Get-M365DSCDRGCimInstances
                 }
 
                 #Retrieve Enum members or format Complextype and retrieve  properties from CmdletDefinition
+                $propertyValues = @{}
                 if ($declaredProperty.propertyType.toString() -notlike 'System.*' -and $declaredProperty.propertyType.toString() -notlike 'microsoft.graph.powershell.models.*')
                 {
                     #write-host ($declaredProperty|out-string) -f Yellow
 
-                    $propertyTypeName = $declaredProperty.propertyType.Replace('[]', '')
+                    $propertyTypeName = $declaredProperty.propertyType.Name.Replace('[]', '')
                     $enum = Get-EnumTypeDefinition -CmdletDefinition $CmdletDefinition -ComplexTypeName $propertyTypeName
                     if ($enum -and -not $declaredProperty.Members)
                     {
-                        $declaredProperty.add('Members', $enum.Members)
+                        $propertyValues.Add('Members', $enum.Members)
                     }
                     #write-host -object ($propertyTypeName|out-string ) -f Green
 
@@ -1701,7 +1807,7 @@ function Get-M365DSCDRGCimInstances
                     if ($complex)
                     {
                         $declaredProperty.propertyType = $declaredProperty.propertyType.replace($propertyTypeName, "microsoft.graph.powershell.models.imicrosoftgraph$propertyTypeName")
-                        $declaredProperty.add('Properties', $complex)
+                        $propertyValues.Add('Properties', $complex)
                     }
                     #write-host -object ($complex|out-string ) -f Yellow
                     #write-host -object ($declaredProperty|out-string ) -f Red
@@ -1716,6 +1822,10 @@ function Get-M365DSCDRGCimInstances
                 if ($declaredProperty.Members)
                 {
                     $currentProperty.Add('Members', $declaredProperty.Members)
+                }
+                elseif ($propertyValues.Members)
+                {
+                    $currentProperty.Add('Members', $propertyValues.Members)
                 }
 
                 $propertyType = $declaredProperty.PropertyType -replace 'System.Nullable`1', ''
@@ -1758,7 +1868,7 @@ function New-M365SchemaPropertySet
 
         [Parameter()]
         [System.String]
-        $Workload
+        $ResourceName
     )
     $schemaProperties = ''
     $Properties | ForEach-Object -Process {
@@ -1768,7 +1878,7 @@ function New-M365SchemaPropertySet
             {
                 $propertyType = $_.Type -replace 'microsoft.graph.powershell.models.', ''
                 $propertyType = $propertyType -replace 'imicrosoftgraph', ''
-                $propertyType = $Workload + $propertyType
+                $propertyType = $ResourceName + $propertyType
                 $propertyType = $propertyType -replace '[[\]]', ''
                 $schemaProperties += "    [Write, Description(`"$($_.Description)`"), EmbeddedInstance(`"MSFT_$propertyType`")] String $($_.Name)"
                 if ($_.Type.EndsWith('[]'))
@@ -1863,7 +1973,9 @@ function New-M365DSCModuleFile
         $Path
     )
     $filePath = "$Path\MSFT_$ResourceName\MSFT_$($ResourceName).psm1"
-    Copy-Item -Path .\Module.Template.psm1 -Destination $filePath
+    $templatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Module.Template.psm1'
+
+    Copy-Item -Path $templatePath -Destination $filePath
 
     return $filePath
 }
@@ -1924,7 +2036,8 @@ function New-M365DSCUnitTest
         $Path
     )
     $filePath = "$Path\Microsoft365DSC.$($ResourceName).Tests.ps1"
-    Copy-Item -Path .\UnitTest.Template.ps1 -Destination $filePath
+    $testPath = Join-Path -Path $PSScriptRoot -ChildPath 'UnitTest.Template.ps1'
+    Copy-Item -Path $testPath -Destination $filePath
 
     return $filePath
 }
@@ -1942,7 +2055,8 @@ function New-M365DSCSchemaFile
         $Path
     )
     $filePath = "$Path\MSFT_$ResourceName\MSFT_$($ResourceName).schema.mof"
-    Copy-Item -Path .\Schema.Template.mof -Destination $filePath
+    $mofPath = Join-Path -Path $PSScriptRoot -ChildPath 'Schema.Template.mof'
+    Copy-Item -Path $mofPath -Destination $filePath
 
     return $filePath
 }
@@ -1959,7 +2073,8 @@ function New-M365DSCSettingsFile
         $Path
     )
     $filePath = "$Path\MSFT_$ResourceName\settings.json"
-    Copy-Item -Path .\settings.template.json -Destination $filePath
+    $settingsPath = Join-Path -Path $PSScriptRoot -ChildPath 'settings.template.json'
+    Copy-Item -Path $settingsPath -Destination $filePath
 
     return $filePath
 }
@@ -1976,7 +2091,8 @@ function New-M365DSCReadmeFile
         $Path
     )
     $filePath = "$Path\MSFT_$ResourceName\readme.md"
-    Copy-Item -Path .\readme.template.md -Destination $filePath
+    $readmePath = Join-Path -Path $PSScriptRoot -ChildPath 'readme.template.md'
+    Copy-Item -Path $readmePath -Destination $filePath
 
     return $filePath
 }
@@ -2028,7 +2144,7 @@ function New-M365HashTableMapping
             {
                 $CimInstanceName = $paramType -replace 'Microsoft.Graph.PowerShell.Models.IMicrosoftGraph', ''
                 $CimInstanceName = $CimInstanceName -replace '[[\]]', ''
-                $CimInstanceName = $Workload + $CimInstanceName
+                $CimInstanceName = $ResourceName + $CimInstanceName
 
                 if ($UseAddtionalProperties)
                 {
@@ -2051,32 +2167,28 @@ function New-M365HashTableMapping
                     $complexTypeContent += "        }`r`n"
                 }
 
-
-
-                $convertToString += "        if (`$Results.$parameterName)`r`n"
-                $convertToString += "        {`r`n"
-                $convertToString += "            `$complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject `$Results.$parameterName -CIMInstanceName $CimInstanceName`r`n"
-                $convertToString += "            if (`$complexTypeStringResult)`r`n"
+                $convertToString += "            if (`$Results.$parameterName)`r`n"
                 $convertToString += "            {`r`n"
-                $convertToString += "                `$Results.$parameterName = `$complexTypeStringResult`r`n"
+                $convertToString += "                `$complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject `$Results.$parameterName -CIMInstanceName $CimInstanceName`r`n"
+                $convertToString += "                if (`$complexTypeStringResult)`r`n"
+                $convertToString += "                {`r`n"
+                $convertToString += "                    `$Results.$parameterName = `$complexTypeStringResult`r`n"
+                $convertToString += "                }`r`n"
+                $convertToString += "                else`r`n"
+                $convertToString += "                {`r`n"
+                $convertToString += "                    `$Results.Remove('$parameterName') | Out-Null`r`n"
+                $convertToString += "                }`r`n"
                 $convertToString += "            }`r`n"
-                $convertToString += "            else`r`n"
-                $convertToString += "            {`r`n"
-                $convertToString += "                `$Results.Remove('$parameterName') | Out-Null`r`n"
-                $convertToString += "            }`r`n"
-                $convertToString += "        }`r`n"
 
-                $convertToVariable += "        if (`$Results.$parameterName)`r`n"
-                $convertToVariable += "        {`r`n"
-                $convertToVariable += "            `$isCIMArray=`$false`r`n"
-                $convertToVariable += "            if(`$Results.$parameterName.getType().Fullname -like `"*[[\]]`")`r`n"
+                $convertToVariable += "            if (`$Results.$parameterName)`r`n"
                 $convertToVariable += "            {`r`n"
-                $convertToVariable += "                `$isCIMArray=`$true`r`n"
+                $convertToVariable += "                `$isCIMArray=`$false`r`n"
+                $convertToVariable += "                if(`$Results.$parameterName.getType().Fullname -like `"*[[\]]`")`r`n"
+                $convertToVariable += "                {`r`n"
+                $convertToVariable += "                    `$isCIMArray=`$true`r`n"
+                $convertToVariable += "                }`r`n"
+                $convertToVariable += "                `$currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock `$currentDSCBlock -ParameterName `"$parameterName`" -isCIMArray:`$isCIMArray`r`n"
                 $convertToVariable += "            }`r`n"
-                $convertToVariable += "            `$currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock `$currentDSCBlock -ParameterName `"$parameterName`" -isCIMArray:`$isCIMArray`r`n"
-                $convertToVariable += "        }`r`n"
-
-
             }
             else
             {
@@ -2087,12 +2199,12 @@ function New-M365HashTableMapping
                     $propertyNameFirstLetter = $propertyNameFirstLetter.ToLower()
                     $propertyNameCamelCaseString = $propertyName.Substring(1)
                     $propertyName = "$($propertyNameFirstLetter)$($propertyNameCamelCaseString)"
-                    $hashtable += "            $($parameterName) = `$getValue.AdditionalProperties.$($propertyName) `r`n"
+                    $hashtable += "            $($parameterName) = `$getValue.AdditionalProperties.$($propertyName)`r`n"
                     $addtionalProperties += "        `"$($property.Name)`"`r`n"
                 }
                 else
                 {
-                    $hashtable += "            $($parameterName) = `$getValue.$($property.Name) `r`n"
+                    $hashtable += "            $($parameterName) = `$getValue.$($property.Name)`r`n"
                 }
             }
         }

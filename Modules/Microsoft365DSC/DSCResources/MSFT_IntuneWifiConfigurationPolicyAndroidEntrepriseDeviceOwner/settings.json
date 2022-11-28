@@ -1,6 +1,6 @@
 {
     "resourceName": "IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwner",
-    "description": "This resource configures an Intune Wifi Configuration Policy Android Entreprise Device Owner Device.",
+    "description": "This resource configures an Intune Wifi Configuration Policy Android Entreprise Device Owner.",
     "permissions":    {
     "graph":  {
                   "delegated":  {

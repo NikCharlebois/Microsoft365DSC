@@ -1,32 +1,39 @@
 {
     "resourceName": "IntuneAntivirusPolicyWindows10SettingCatalog",
-    "description": "This resource configures an Intune Endpoint Protection Antivirus policy for a Windows 10 Device.",
-    "permissions": {
-        "graph": {
-            "delegated": {
-                "read": [
-                    {
-                        "name": "DeviceManagementConfiguration.Read.All"
-                    }
-                ],
-                "update": [
-                    {
-                        "name": "DeviceManagementConfiguration.ReadWrite.All"
-                    }
-                ]
-            },
-            "application": {
-                "read": [
-                    {
-                        "name": "DeviceManagementConfiguration.Read.All"
-                    }
-                ],
-                "update": [
-                    {
-                        "name": "DeviceManagementConfiguration.ReadWrite.All"
-                    }
-                ]
-            }
-        }
-    }
+    "description": "This resource configures an Intune Antivirus Policy Windows10 Setting Catalog.",
+    "permissions":    {
+    "graph":  {
+                  "delegated":  {
+                                    "read":  [
+                                                 {
+                                                     "name":  "DeviceManagementConfiguration.Read.All"
+                                                 },
+                                                 {
+                                                     "name":  "DeviceManagementConfiguration.ReadWrite.All"
+                                                 }
+                                             ],
+                                    "update":  [
+                                                   {
+                                                       "name":  "DeviceManagementConfiguration.ReadWrite.All"
+                                                   }
+                                               ]
+                                },
+                  "application":  {
+                                      "read":  [
+                                                   {
+                                                       "name":  "DeviceManagementConfiguration.Read.All"
+                                                   },
+                                                   {
+                                                       "name":  "DeviceManagementConfiguration.ReadWrite.All"
+                                                   }
+                                               ],
+                                      "update":  [
+                                                     {
+                                                         "name":  "DeviceManagementConfiguration.ReadWrite.All"
+                                                     }
+                                                 ]
+                                  }
+              }
+}
+
 }

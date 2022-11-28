@@ -14,8 +14,28 @@ function Get-TargetResource
         $Description,
 
         [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleDeviceMode,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleOsEdition,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleOsVersion,
+
+        [Parameter()]
         [System.String]
         $DisplayName,
+
+        [Parameter()]
+        [System.String[]]
+        $RoleScopeTagIds,
+
+        [Parameter()]
+        [System.Boolean]
+        $SupportsScopeTags,
 
         [Parameter()]
         [System.Boolean]
@@ -31,48 +51,72 @@ function Get-TargetResource
 
         [Parameter()]
         [System.String]
-        $PreSharedKey,
+        $Ssid,
 
         [Parameter()]
-        [System.Boolean]
-        $PreSharedKeyIsSet,
+        [ValidateSet('open','wpaEnterprise','wpa2Enterprise')]
+        [System.String]
+        $WiFiSecurityType,
+
+        [Parameter()]
+        [ValidateSet('certificate','usernameAndPassword','derivedCredential')]
+        [System.String]
+        $AuthenticationMethod,
+
+        [Parameter()]
+        [ValidateSet('eapTls','eapTtls','peap')]
+        [System.String]
+        $EapType,
+
+        [Parameter()]
+        [ValidateSet('unencryptedPassword','challengeHandshakeAuthenticationProtocol','microsoftChap','microsoftChapVersionTwo')]
+        [System.String]
+        $InnerAuthenticationProtocolForEapTtls,
+
+        [Parameter()]
+        [ValidateSet('none','microsoftChapVersionTwo')]
+        [System.String]
+        $InnerAuthenticationProtocolForPeap,
+
+        [Parameter()]
+        [System.String]
+        $OuterIdentityPrivacyTemporaryValue,
 
         [Parameter()]
         [System.String]
         $ProxyAutomaticConfigurationUrl,
 
         [Parameter()]
-        [System.String]
-        $ProxyExclusionList,
-
-        [Parameter()]
-        [System.String]
-        $ProxyManualAddress,
-
-        [Parameter()]
-        [System.Int32]
-        $ProxyManualPort,
-
-        [Parameter()]
-        [ValidateSet('none', 'manual', 'automatic')]
+        [ValidateSet('none','manual','automatic')]
         [System.String]
         $ProxySettings,
 
         [Parameter()]
-        [System.String]
-        $Ssid,
+        [System.String[]]
+        $TrustedServerCertificateNames,
 
         [Parameter()]
-        [ValidateSet('open', 'wep', 'wpaPersonal', 'wpaEnterprise')]
-        [System.String]
-        $WiFiSecurityType,
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $DeviceSettingStateSummaries,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $DeviceStatuses,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $GroupAssignments,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $UserStatuses,
 
 
         [Parameter()]
         [Microsoft.Management.Infrastructure.CimInstance[]]
         $Assignments,
 
-        #endregion
+        #endregion 
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -108,18 +152,13 @@ function Get-TargetResource
     {
         $ConnectionMode = New-M365DSCConnection -Workload 'MicrosoftGraph' `
             -InboundParameters $PSBoundParameters `
-            -ProfileName 'v1.0'
-        $context = Get-MgContext
-        if ($null -eq $context)
-        {
-            $ConnectionMode = New-M365DSCConnection -Workload 'MicrosoftGraph' `
-                -InboundParameters $PSBoundParameters -ProfileName 'beta'
-        }
-        Select-MgProfile 'beta' -ErrorAction Stop
+            -ProfileName 'beta'
+
+        Select-MgProfile 'beta'
     }
     catch
     {
-        Write-Verbose -Message 'Connection to the workload failed.'
+        Write-Verbose -Message ($_)
     }
 
     #Ensure the proper dependencies are installed in the current environment.
@@ -139,67 +178,139 @@ function Get-TargetResource
     try
     {
         $getValue = $null
-
+        
         #region resource generator code
-        if (-Not [string]::IsNullOrEmpty($DisplayName))
+        $getValue = $null
+        if ($id)
         {
-            $getValue = Get-MgDeviceManagementDeviceConfiguration `
-                -ErrorAction Stop | Where-Object `
-                -FilterScript { `
-                    $_.DisplayName -eq "$($DisplayName)" `
-            }
+            Write-Verbose -Message "Getting instance by {DeviceConfigurationId} = {$id}"
+            $getValue = Get-MgDeviceManagementDeviceConfiguration -DeviceConfigurationId $id -ErrorAction SilentlyContinue
         }
-
-        if (-not $getValue)
-        {
-            [array]$getValue = Get-MgDeviceManagementDeviceConfiguration `
-                -ErrorAction Stop | Where-Object `
-                -FilterScript { `
-                    $_.id -eq $id `
-            }
-        }
-        #endregion
-
-
         if ($null -eq $getValue)
         {
-            Write-Verbose -Message "Nothing with id {$id} was found"
+            if ($id)
+            {
+                Write-Verbose -Message "Nothing with id {$id} was found"
+            }
+            Write-Verbose -Message "Getting instance by {DisplayName} = {$DisplayName}"
+            $getValue = Get-MgDeviceManagementDeviceConfiguration -Filter "DisplayName eq '$DisplayName'" -ErrorAction SilentlyContinue
+            if ($null -ne $getValue)
+            {
+                Write-Verbose -Message "Found instance with DisplayName = {$DisplayName}"
+            }
+        }
+        else
+        {
+            Write-Verbose -Message "Found instance with id = {$id}"
+        }
+        #endregion
+        
+        if ($null -eq $getValue)
+        {
+            Write-Verbose -Message "No instances were found with either id or DisplayName"
             return $nullResult
         }
 
-        Write-Verbose -Message "Found something with id {$id}"
         $results = @{
-
             #region resource generator code
-            Id                             = $getValue.Id
-            Description                    = $getValue.Description
-            DisplayName                    = $getValue.DisplayName
-            ConnectAutomatically           = $getValue.AdditionalProperties.connectAutomatically
+            Id = $getValue.Id
+            Description = $getValue.Description
+            DisplayName = $getValue.DisplayName
+            RoleScopeTagIds = $getValue.RoleScopeTagIds
+            SupportsScopeTags = $getValue.AdditionalProperties.supportsScopeTags
+            ConnectAutomatically = $getValue.AdditionalProperties.connectAutomatically
             ConnectWhenNetworkNameIsHidden = $getValue.AdditionalProperties.connectWhenNetworkNameIsHidden
-            NetworkName                    = $getValue.AdditionalProperties.networkName
-            PreSharedKey                   = $getValue.AdditionalProperties.preSharedKey
-            PreSharedKeyIsSet              = $getValue.AdditionalProperties.preSharedKeyIsSet
+            NetworkName = $getValue.AdditionalProperties.networkName
+            Ssid = $getValue.AdditionalProperties.ssid
+            WiFiSecurityType = $getValue.AdditionalProperties.wiFiSecurityType
+            AuthenticationMethod = $getValue.AdditionalProperties.authenticationMethod
+            EapType = $getValue.AdditionalProperties.eapType
+            InnerAuthenticationProtocolForEapTtls = $getValue.AdditionalProperties.innerAuthenticationProtocolForEapTtls
+            InnerAuthenticationProtocolForPeap = $getValue.AdditionalProperties.innerAuthenticationProtocolForPeap
+            OuterIdentityPrivacyTemporaryValue = $getValue.AdditionalProperties.outerIdentityPrivacyTemporaryValue
             ProxyAutomaticConfigurationUrl = $getValue.AdditionalProperties.proxyAutomaticConfigurationUrl
-            ProxyExclusionList             = $getValue.AdditionalProperties.proxyExclusionList
-            ProxyManualAddress             = $getValue.AdditionalProperties.proxyManualAddress
-            ProxyManualPort                = $getValue.AdditionalProperties.proxyManualPort
-            ProxySettings                  = $getValue.AdditionalProperties.proxySettings
-            Ssid                           = $getValue.AdditionalProperties.ssid
-            WiFiSecurityType               = $getValue.AdditionalProperties.wiFiSecurityType
+            ProxySettings = $getValue.AdditionalProperties.proxySettings
+            TrustedServerCertificateNames = $getValue.AdditionalProperties.trustedServerCertificateNames
 
-
-            Ensure                         = 'Present'
-            Credential                     = $Credential
-            ApplicationId                  = $ApplicationId
-            TenantId                       = $TenantId
-            ApplicationSecret              = $ApplicationSecret
-            CertificateThumbprint          = $CertificateThumbprint
-            Managedidentity                = $ManagedIdentity.IsPresent
+            
+            Ensure                = 'Present'
+            Credential            = $Credential
+            ApplicationId         = $ApplicationId
+            TenantId              = $TenantId
+            ApplicationSecret     = $ApplicationSecret
+            CertificateThumbprint = $CertificateThumbprint
+            Managedidentity       = $ManagedIdentity.IsPresent
+        }
+        if ($getValue.DeviceManagementApplicabilityRuleDeviceMode)
+        {
+            $results.Add("DeviceManagementApplicabilityRuleDeviceMode", (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $getValue.DeviceManagementApplicabilityRuleDeviceMode))
+        }
+        if ($getValue.DeviceManagementApplicabilityRuleOsEdition)
+        {
+            $results.Add("DeviceManagementApplicabilityRuleOsEdition", (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $getValue.DeviceManagementApplicabilityRuleOsEdition))
+        }
+        if ($getValue.DeviceManagementApplicabilityRuleOsVersion)
+        {
+            $results.Add("DeviceManagementApplicabilityRuleOsVersion", (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $getValue.DeviceManagementApplicabilityRuleOsVersion))
+        }
+        if ($getValue.additionalProperties.deviceSettingStateSummaries)
+        {
+            $results.Add("DeviceSettingStateSummaries", $getValue.additionalProperties.deviceSettingStateSummaries)
+        }
+        if ($getValue.additionalProperties.deviceStatuses)
+        {
+            $results.Add("DeviceStatuses", $getValue.additionalProperties.deviceStatuses)
+        }
+        if ($getValue.additionalProperties.groupAssignments)
+        {
+            $results.Add("GroupAssignments", $getValue.additionalProperties.groupAssignments)
+        }
+        if ($getValue.additionalProperties.userStatuses)
+        {
+            $results.Add("UserStatuses", $getValue.additionalProperties.userStatuses)
         }
 
-        $myAssignments = @()
-        $myAssignments += Get-MgDeviceManagementPolicyAssignments -DeviceManagementPolicyId $getValue.Id -repository 'deviceConfigurations'
-        $results.Add('Assignments', $myAssignments)
+        $assignmentsValues = Get-MgDeviceManagementDeviceConfigurationAssignment -DeviceConfigurationId $getValue.Id
+        $assignmentResult = @()
+        foreach ($assignmentEntry in $AssignmentsValues)
+        {
+            $groupName = $null
+            $groupIdValue = $assignmentEntry.Id.Split('_')[1]
+            if ($groupIdValue -eq 'acacacac-9df4-4c7d-9d50-4ef0226f57a9')
+            {
+                $groupName = 'AllUsers'
+            }
+            elseif ($groupIdValue -eq 'adadadad-808e-44e2-905a-0b7873a8a531')
+            {
+                $groupName = 'AllDevices'
+            }
+            else
+            {
+                $groupInstance = Get-MgGroup -GroupId $groupIdValue
+                if ($groupInstance)
+                {
+                    $groupName = $groupInstance.DisplayName
+                }
+            }
+            $assignmentValue = @{
+                dataType                                   = $assignmentEntry.Target.AdditionalProperties.'@odata.type'
+                groupId                                    = $assignmentEntry.Target.AdditionalProperties.groupId
+            }
+            if ($assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterType)
+            {
+                $assignmentValue.Add('deviceAndAppManagementAssignmentFilterType', $assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterType.ToString())
+            }
+            if ($assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterId)
+            {
+                $assignmentValue.Add('deviceAndAppManagementAssignmentFilterId', $assignmentEntry.Target.DeviceAndAppManagementAssignmentFilterId)
+            }
+            if ($groupName)
+            {
+                $assignmentValue.Add('GroupName', $groupName)
+            }
+            $assignmentResult += $assignmentValue
+        }
+        $results.Add('Assignments', $assignmentResult)
 
         return [System.Collections.Hashtable] $results
     }
@@ -234,7 +345,7 @@ function Set-TargetResource
     [CmdletBinding()]
     param
     (
-
+        
         #region resource generator code
         [Parameter()]
         [System.String]
@@ -245,8 +356,28 @@ function Set-TargetResource
         $Description,
 
         [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleDeviceMode,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleOsEdition,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleOsVersion,
+
+        [Parameter()]
         [System.String]
         $DisplayName,
+
+        [Parameter()]
+        [System.String[]]
+        $RoleScopeTagIds,
+
+        [Parameter()]
+        [System.Boolean]
+        $SupportsScopeTags,
 
         [Parameter()]
         [System.Boolean]
@@ -262,48 +393,72 @@ function Set-TargetResource
 
         [Parameter()]
         [System.String]
-        $PreSharedKey,
+        $Ssid,
 
         [Parameter()]
-        [System.Boolean]
-        $PreSharedKeyIsSet,
+        [ValidateSet('open','wpaEnterprise','wpa2Enterprise')]
+        [System.String]
+        $WiFiSecurityType,
+
+        [Parameter()]
+        [ValidateSet('certificate','usernameAndPassword','derivedCredential')]
+        [System.String]
+        $AuthenticationMethod,
+
+        [Parameter()]
+        [ValidateSet('eapTls','eapTtls','peap')]
+        [System.String]
+        $EapType,
+
+        [Parameter()]
+        [ValidateSet('unencryptedPassword','challengeHandshakeAuthenticationProtocol','microsoftChap','microsoftChapVersionTwo')]
+        [System.String]
+        $InnerAuthenticationProtocolForEapTtls,
+
+        [Parameter()]
+        [ValidateSet('none','microsoftChapVersionTwo')]
+        [System.String]
+        $InnerAuthenticationProtocolForPeap,
+
+        [Parameter()]
+        [System.String]
+        $OuterIdentityPrivacyTemporaryValue,
 
         [Parameter()]
         [System.String]
         $ProxyAutomaticConfigurationUrl,
 
         [Parameter()]
-        [System.String]
-        $ProxyExclusionList,
-
-        [Parameter()]
-        [System.String]
-        $ProxyManualAddress,
-
-        [Parameter()]
-        [System.Int32]
-        $ProxyManualPort,
-
-        [Parameter()]
-        [ValidateSet('none', 'manual', 'automatic')]
+        [ValidateSet('none','manual','automatic')]
         [System.String]
         $ProxySettings,
 
         [Parameter()]
-        [System.String]
-        $Ssid,
+        [System.String[]]
+        $TrustedServerCertificateNames,
 
         [Parameter()]
-        [ValidateSet('open', 'wep', 'wpaPersonal', 'wpaEnterprise')]
-        [System.String]
-        $WiFiSecurityType,
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $DeviceSettingStateSummaries,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $DeviceStatuses,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $GroupAssignments,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $UserStatuses,
 
 
         [Parameter()]
         [Microsoft.Management.Infrastructure.CimInstance[]]
         $Assignments,
 
-        #endregion
+        #endregion 
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -339,13 +494,8 @@ function Set-TargetResource
     {
         $ConnectionMode = New-M365DSCConnection -Workload 'MicrosoftGraph' `
             -InboundParameters $PSBoundParameters `
-            -ProfileName 'v1.0'
-        $context = Get-MgContext
-        if ($null -eq $context)
-        {
-            $ConnectionMode = New-M365DSCConnection -Workload 'MicrosoftGraph' `
-                -InboundParameters $PSBoundParameters -ProfileName 'beta'
-        }
+            -ProfileName 'beta'
+
         Select-MgProfile 'beta' -ErrorAction Stop
     }
     catch
@@ -375,16 +525,15 @@ function Set-TargetResource
     $PSBoundParameters.Remove('CertificateThumbprint') | Out-Null
     $PSBoundParameters.Remove('ManagedIdentity') | Out-Null
 
-
     if ($Ensure -eq 'Present' -and $currentInstance.Ensure -eq 'Absent')
     {
         Write-Verbose -Message "Creating {$DisplayName}"
-        $PSBoundParameters.Remove('Assignments') | Out-Null
+        $PSBoundParameters.Remove("Assignments") | Out-Null
 
         $CreateParameters = ([Hashtable]$PSBoundParameters).clone()
         $CreateParameters = Rename-M365DSCCimInstanceODataParameter -Properties $CreateParameters
 
-        $AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($CreateParameters)
+        <#$AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($CreateParameters)
         foreach ($key in $AdditionalProperties.keys)
         {
             if ($key -ne '@odata.type')
@@ -392,52 +541,100 @@ function Set-TargetResource
                 $keyName = $key.substring(0, 1).ToUpper() + $key.substring(1, $key.length - 1)
                 $CreateParameters.remove($keyName)
             }
-        }
+        }#>
 
         $CreateParameters.Remove('Id') | Out-Null
         $CreateParameters.Remove('Verbose') | Out-Null
 
-        foreach ($key in ($CreateParameters.clone()).Keys)
+        <#foreach ($key in ($CreateParameters.clone()).Keys)
         {
             if ($CreateParameters[$key].getType().Fullname -like '*CimInstance*')
             {
                 $CreateParameters[$key] = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters[$key]
             }
-        }
+        }#>
 
-        if ($AdditionalProperties)
+        $keys=(([Hashtable]$CreateParameters).clone()).Keys
+        foreach($key in $keys)
+        {
+            $keyName=$key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
+            $keyValue= $CreateParameters.$key
+            if($null -ne $CreateParameters.$key -and $CreateParameters.$key.getType().Name -like "*cimInstance*")
+            {
+                $keyValue= Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters.$key
+            }
+            $CreateParameters.remove($key)
+            $CreateParameters.add($keyName,$keyValue)
+        }
+        $CreateParameters.add('@odata.type','#microsoft.graph.androidWorkProfileEnterpriseWiFiConfiguration')
+
+        <#if ($AdditionalProperties)
         {
             $CreateParameters.add('AdditionalProperties', $AdditionalProperties)
-        }
-
-
+        }#>
+        
         #region resource generator code
-        $policy = New-MgDeviceManagementDeviceConfiguration @CreateParameters
+        $currentInstance = New-MgDeviceManagementDeviceConfiguration -BodyParameter $CreateParameters
         $assignmentsHash = @()
-        foreach ($assignment in $Assignments)
+        foreach($assignment in $Assignments)
         {
-            $assignmentsHash += Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Assignment
+            $currentHash = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $assignment
+            if ($currentHash.groupId)
+            {
+                $groupInstance = Get-MgGroup -GroupId $currentHash.groupId -ErrorAction 'SilentlyContinue'
+                if (-not $groupInstance -and $currentHash.groupName)
+                {
+                    $groupInstance = Get-MgGroup -Filter "DisplayName eq '$($currentHash.groupName)'"
+                    if ($groupInstance) 
+                    {
+                        $currentHash.groupId = $groupInstance.Id
+                        $currentHash.Remove('GroupName') | Out-Null
+                    }
+                }
+            }
+            $assignmentsHash += $currentHash
         }
 
-        if ($policy.id)
+        if($currentInstance.id)
         {
-            Update-MgDeviceManagementPolicyAssignments -DeviceManagementPolicyId $policy.id `
-                -Targets $assignmentsHash `
-                -Repository deviceConfigurations
+            Write-Verbose -Message "Updating Assignments with:`r`n$($assignmentsHash | Out-String)"
+            $retries = 10
+            $entryUpdated = $false
+            do
+            {
+                try
+                {
+                    Update-DeviceConfigurationPolicyAssignment -DeviceConfigurationPolicyId $currentInstance.id `
+                        -Targets $assignmentsHash `
+                        -Repository deviceConfigurations `
+                        -ErrorAction Stop
+                    $entryUpdated = $true
+                }
+                catch
+                {
+                    Write-Verbose -Message "Failed updating the assignments for {$($currentInstance.id)}. Retrying in 5 second."
+                    $retries--
+                    Start-Sleep 5
+                }
+            } while ($retries -gt 0 -and -not $entryUpdated)
+            if ($entryUpdated)
+            {
+                Write-Verbose -Message "Assignments for {$($currentInstance.id)} were successfully updated."
+            }
         }
 
         #endregion
-
+        
     }
     elseif ($Ensure -eq 'Present' -and $currentInstance.Ensure -eq 'Present')
     {
         Write-Verbose -Message "Updating {$DisplayName}"
-        $PSBoundParameters.Remove('Assignments') | Out-Null
+        $PSBoundParameters.Remove("Assignments") | Out-Null
 
         $UpdateParameters = ([Hashtable]$PSBoundParameters).clone()
         $UpdateParameters = Rename-M365DSCCimInstanceODataParameter -Properties $UpdateParameters
 
-        $AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($UpdateParameters)
+        <#$AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($UpdateParameters)
         foreach ($key in $AdditionalProperties.keys)
         {
             if ($key -ne '@odata.type')
@@ -445,54 +642,118 @@ function Set-TargetResource
                 $keyName = $key.substring(0, 1).ToUpper() + $key.substring(1, $key.length - 1)
                 $UpdateParameters.remove($keyName)
             }
-        }
+        }#>
 
         $UpdateParameters.Remove('Id') | Out-Null
         $UpdateParameters.Remove('Verbose') | Out-Null
 
-        foreach ($key in ($UpdateParameters.clone()).Keys)
+        <#foreach ($key in ($UpdateParameters.clone()).Keys)
         {
             if ($UpdateParameters[$key].getType().Fullname -like '*CimInstance*')
             {
                 $UpdateParameters[$key] = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters[$key]
             }
-        }
+        }#>
 
-        if ($AdditionalProperties)
+        $keys=(([Hashtable]$UpdateParameters).clone()).Keys
+        foreach($key in $keys)
+        {
+            $keyName=$key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
+            $keyValue= $UpdateParameters.$key
+            if($null -ne $UpdateParameters.$key -and $UpdateParameters.$key.getType().Name -like "*cimInstance*")
+            {
+                $keyValue= Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters.$key
+            }
+            $UpdateParameters.remove($key)
+            $UpdateParameters.add($keyName,$keyValue)
+        }
+        $UpdateParameters.add('@odata.type','#microsoft.graph.androidWorkProfileEnterpriseWiFiConfiguration')
+
+        <#if ($AdditionalProperties)
         {
             $UpdateParameters.add('AdditionalProperties', $AdditionalProperties)
+        }#>
+        [Array]$keys = $UpdateParameters.Keys.ToLower()
+        if ($keys.Contains('priority'))
+        {
+            Write-Verbose -Message "Update parameters contain 'Priority'"
+            $PriorityValue = $UpdateParameters.priority
+            $UpdateParameters.Remove('priority') | Out-Null
         }
 
-
+        
         #region resource generator code
-        Update-MgDeviceManagementDeviceConfiguration @UpdateParameters `
+        Write-Verbose -Message "Updating {$($currentInstance.Id)} with`r`n$($UpdateParameters | Out-String)"
+        Update-MgDeviceManagementDeviceConfiguration -BodyParameter $UpdateParameters `
             -DeviceConfigurationId $currentInstance.Id
         $assignmentsHash = @()
-        foreach ($assignment in $Assignments)
+        foreach($assignment in $Assignments)
         {
-            $assignmentsHash += Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Assignment
+            $currentHash = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $assignment
+            if ($currentHash.groupId)
+            {
+                $groupInstance = Get-MgGroup -GroupId $currentHash.groupId -ErrorAction 'SilentlyContinue'
+                if (-not $groupInstance -and $currentHash.groupName)
+                {
+                    $groupInstance = Get-MgGroup -Filter "DisplayName eq '$($currentHash.groupName)'"
+                    if ($groupInstance) 
+                    {
+                        $currentHash.groupId = $groupInstance.Id
+                        $currentHash.Remove('GroupName') | Out-Null
+                    }
+                }
+            }
+            $assignmentsHash += $currentHash
         }
-        Update-MgDeviceManagementPolicyAssignments -DeviceManagementPolicyId $currentInstance.id `
-            -Targets $assignmentsHash `
-            -Repository deviceConfigurations
+
+        if($currentInstance.id)
+        {
+            Write-Verbose -Message "Updating Assignments with:`r`n$($assignmentsHash | Out-String)"
+            $retries = 10
+            $entryUpdated = $false
+            do
+            {
+                try
+                {
+                    Update-DeviceConfigurationPolicyAssignment -DeviceConfigurationPolicyId $currentInstance.id `
+                        -Targets $assignmentsHash `
+                        -Repository deviceConfigurations `
+                        -ErrorAction Stop
+                    $entryUpdated = $true
+                }
+                catch
+                {
+                    Write-Verbose -Message "Failed updating the assignments for {$($currentInstance.id)}. Retrying in 5 second."
+                    $retries--
+                    Start-Sleep 5
+                }
+            } while ($retries -gt 0 -and -not $entryUpdated)
+            if ($entryUpdated)
+            {
+                Write-Verbose -Message "Assignments for {$($currentInstance.id)} were successfully updated."
+            }
+        }
 
         #endregion
+        
+        #Set-MgDeviceManagementDeviceConfigurationPriority -DeviceConfigurationId $currentInstance.Id `
+            #-Priority $PriorityValue
 
     }
     elseif ($Ensure -eq 'Absent' -and $currentInstance.Ensure -eq 'Present')
     {
         Write-Verbose -Message "Removing {$DisplayName}"
 
-
+        
         #region resource generator code
         #endregion
+        
 
-
-
+        
         #region resource generator code
         Remove-MgDeviceManagementDeviceConfiguration -DeviceConfigurationId $currentInstance.Id
         #endregion
-
+        
     }
 }
 
@@ -502,7 +763,7 @@ function Test-TargetResource
     [OutputType([System.Boolean])]
     param
     (
-
+        
         #region resource generator code
         [Parameter()]
         [System.String]
@@ -513,8 +774,28 @@ function Test-TargetResource
         $Description,
 
         [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleDeviceMode,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleOsEdition,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance]
+        $DeviceManagementApplicabilityRuleOsVersion,
+
+        [Parameter()]
         [System.String]
         $DisplayName,
+
+        [Parameter()]
+        [System.String[]]
+        $RoleScopeTagIds,
+
+        [Parameter()]
+        [System.Boolean]
+        $SupportsScopeTags,
 
         [Parameter()]
         [System.Boolean]
@@ -530,48 +811,72 @@ function Test-TargetResource
 
         [Parameter()]
         [System.String]
-        $PreSharedKey,
+        $Ssid,
 
         [Parameter()]
-        [System.Boolean]
-        $PreSharedKeyIsSet,
+        [ValidateSet('open','wpaEnterprise','wpa2Enterprise')]
+        [System.String]
+        $WiFiSecurityType,
+
+        [Parameter()]
+        [ValidateSet('certificate','usernameAndPassword','derivedCredential')]
+        [System.String]
+        $AuthenticationMethod,
+
+        [Parameter()]
+        [ValidateSet('eapTls','eapTtls','peap')]
+        [System.String]
+        $EapType,
+
+        [Parameter()]
+        [ValidateSet('unencryptedPassword','challengeHandshakeAuthenticationProtocol','microsoftChap','microsoftChapVersionTwo')]
+        [System.String]
+        $InnerAuthenticationProtocolForEapTtls,
+
+        [Parameter()]
+        [ValidateSet('none','microsoftChapVersionTwo')]
+        [System.String]
+        $InnerAuthenticationProtocolForPeap,
+
+        [Parameter()]
+        [System.String]
+        $OuterIdentityPrivacyTemporaryValue,
 
         [Parameter()]
         [System.String]
         $ProxyAutomaticConfigurationUrl,
 
         [Parameter()]
-        [System.String]
-        $ProxyExclusionList,
-
-        [Parameter()]
-        [System.String]
-        $ProxyManualAddress,
-
-        [Parameter()]
-        [System.Int32]
-        $ProxyManualPort,
-
-        [Parameter()]
-        [ValidateSet('none', 'manual', 'automatic')]
+        [ValidateSet('none','manual','automatic')]
         [System.String]
         $ProxySettings,
 
         [Parameter()]
-        [System.String]
-        $Ssid,
+        [System.String[]]
+        $TrustedServerCertificateNames,
 
         [Parameter()]
-        [ValidateSet('open', 'wep', 'wpaPersonal', 'wpaEnterprise')]
-        [System.String]
-        $WiFiSecurityType,
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $DeviceSettingStateSummaries,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $DeviceStatuses,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $GroupAssignments,
+
+        [Parameter()]
+        [Microsoft.Management.Infrastructure.CimInstance[]]
+        $UserStatuses,
 
 
         [Parameter()]
         [Microsoft.Management.Infrastructure.CimInstance[]]
         $Assignments,
 
-        #endregion
+        #endregion 
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -615,47 +920,38 @@ function Test-TargetResource
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
-    Write-Verbose -Message "Testing configuration of {$id}"
+    if ($id)
+    {
+        Write-Verbose -Message "Testing configuration of {$id}"
+    }
+    elseif ($DisplayName)
+    {
+        Write-Verbose -Message "Testing configuration of {$DisplayName}"
+    }
 
     $CurrentValues = Get-TargetResource @PSBoundParameters
     $ValuesToCheck = ([Hashtable]$PSBoundParameters).clone()
 
-    if ($CurrentValues.Ensure -eq 'Absent')
+    if ($CurrentValues.Ensure -eq "Absent")
     {
         Write-Verbose -Message "Test-TargetResource returned $false"
         return $false
     }
     $testResult = $true
 
+    #Compare Cim instances
     foreach ($key in $PSBoundParameters.Keys)
     {
-        if ($PSBoundParameters[$key].getType().Name -like '*CimInstance*')
+        $source = $PSBoundParameters.$key
+        $target = $CurrentValues.$key
+        if ($source.getType().Name -like "*CimInstance*")
         {
+            $source = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $source
 
-            $CIMArraySource = @()
-            $CIMArrayTarget = @()
-            $CIMArraySource += $PSBoundParameters[$key]
-            $CIMArrayTarget += $CurrentValues.$key
-            if ($CIMArraySource.count -ne $CIMArrayTarget.count)
-            {
-                Write-Verbose -Message "Configuration drift:Number of items does not match: Source=$($CIMArraySource.count) Target=$($CIMArrayTarget.count)"
-                $testResult = $false
-                break
-            }
-            $i = 0
-            foreach ($item in $CIMArraySource )
-            {
-                $testResult = Compare-M365DSCComplexObject `
-                    -Source (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $CIMArraySource[$i]) `
-                    -Target ($CIMArrayTarget[$i])
+            $testResult = Compare-M365DSCComplexObject `
+                -Source ($source) `
+                -Target ($target)
 
-                $i++
-                if (-Not $testResult)
-                {
-                    $testResult = $false
-                    break;
-                }
-            }
             if (-Not $testResult)
             {
                 $testResult = $false
@@ -666,13 +962,8 @@ function Test-TargetResource
         }
     }
 
-    $ValuesToCheck.Remove('Credential') | Out-Null
-    $ValuesToCheck.Remove('ApplicationId') | Out-Null
-    $ValuesToCheck.Remove('TenantId') | Out-Null
-    $ValuesToCheck.Remove('ApplicationSecret') | Out-Null
-
-    #Write-Verbose -Message "Current Values: $(Convert-M365DscHashtableToString -Hashtable $CurrentValues)"
-    #Write-Verbose -Message "Target Values: $(Convert-M365DscHashtableToString -Hashtable $ValuesToCheck)"
+    Write-Verbose -Message "Current Values: $(Convert-M365DscHashtableToString -Hashtable $CurrentValues)"
+    Write-Verbose -Message "Target Values: $(Convert-M365DscHashtableToString -Hashtable $ValuesToCheck)"
 
     #Convert any DateTime to String
     foreach ($key in $ValuesToCheck.Keys)
@@ -682,6 +973,12 @@ function Test-TargetResource
         {
             $CurrentValues[$key] = $CurrentValues[$key].toString()
         }
+    }
+
+    # Do not compare Ids since these could be different across tenants when cloning configurations.
+    if ($ValuesToCheck.Contains("Id"))
+    {
+        $ValuesToCheck.Remove("Id") | Out-Null
     }
 
     if ($testResult)
@@ -730,13 +1027,7 @@ function Export-TargetResource
 
     $ConnectionMode = New-M365DSCConnection -Workload 'MicrosoftGraph' `
         -InboundParameters $PSBoundParameters `
-        -ProfileName 'v1.0'
-    $context = Get-MgContext
-    if ($null -eq $context)
-    {
-        $ConnectionMode = New-M365DSCConnection -Workload 'MicrosoftGraph' `
-            -InboundParameters $PSBoundParameters -ProfileName 'beta'
-    }
+        -ProfileName 'beta'
     Select-MgProfile 'beta' -ErrorAction Stop
 
     #Ensure the proper dependencies are installed in the current environment.
@@ -753,17 +1044,18 @@ function Export-TargetResource
 
     try
     {
-
         #region resource generator code
         [array]$getValue = Get-MgDeviceManagementDeviceConfiguration `
             -ErrorAction Stop | Where-Object `
             -FilterScript { `
-                $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.androidDeviceOwnerWiFiConfiguration'  `
+                $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.androidWorkProfileEnterpriseWiFiConfiguration'  `
+            }
+        if (-not $getValue)
+        {
+            [array]$getValue = Get-MgDeviceManagementDeviceConfiguration 
+                -ErrorAction Stop
         }
-
-
         #endregion
-
 
         $i = 1
         $dscContent = ''
@@ -777,7 +1069,12 @@ function Export-TargetResource
         }
         foreach ($config in $getValue)
         {
-            Write-Host "    |---[$i/$($getValue.Count)] $($config.id)" -NoNewline
+            $displayedKey=$config.id
+            if(-not [String]::IsNullOrEmpty($config.displayName))
+            {
+                $displayedKey=$config.displayName
+            }
+            Write-Host "    |---[$i/$($getValue.Count)] $displayedKey" -NoNewline
             $params = @{
                 id                    = $config.id
                 Ensure                = 'Present'
@@ -793,10 +1090,94 @@ function Export-TargetResource
             $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
                 -Results $Results
 
-
-            if ($Results.Assignments)
+            if ($Results.DeviceManagementApplicabilityRuleDeviceMode)
             {
-                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.Assignments -CIMInstanceName DeviceManagementConfigurationPolicyAssignments
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.DeviceManagementApplicabilityRuleDeviceMode -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnerdevicemanagementapplicabilityruledevicemode
+                if ($complexTypeStringResult)
+                {
+                    $Results.DeviceManagementApplicabilityRuleDeviceMode = $complexTypeStringResult
+                }
+                else
+                {
+                    $Results.Remove('DeviceManagementApplicabilityRuleDeviceMode') | Out-Null
+                }
+            }
+            if ($Results.DeviceManagementApplicabilityRuleOsEdition)
+            {
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.DeviceManagementApplicabilityRuleOsEdition -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnerdevicemanagementapplicabilityruleosedition
+                if ($complexTypeStringResult)
+                {
+                    $Results.DeviceManagementApplicabilityRuleOsEdition = $complexTypeStringResult
+                }
+                else
+                {
+                    $Results.Remove('DeviceManagementApplicabilityRuleOsEdition') | Out-Null
+                }
+            }
+            if ($Results.DeviceManagementApplicabilityRuleOsVersion)
+            {
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.DeviceManagementApplicabilityRuleOsVersion -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnerdevicemanagementapplicabilityruleosversion
+                if ($complexTypeStringResult)
+                {
+                    $Results.DeviceManagementApplicabilityRuleOsVersion = $complexTypeStringResult
+                }
+                else
+                {
+                    $Results.Remove('DeviceManagementApplicabilityRuleOsVersion') | Out-Null
+                }
+            }
+            if ($Results.DeviceSettingStateSummaries)
+            {
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.DeviceSettingStateSummaries -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnersettingstatedevicesummary
+                if ($complexTypeStringResult)
+                {
+                    $Results.DeviceSettingStateSummaries = $complexTypeStringResult
+                }
+                else
+                {
+                    $Results.Remove('DeviceSettingStateSummaries') | Out-Null
+                }
+            }
+            if ($Results.DeviceStatuses)
+            {
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.DeviceStatuses -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnerdeviceconfigurationdevicestatus
+                if ($complexTypeStringResult)
+                {
+                    $Results.DeviceStatuses = $complexTypeStringResult
+                }
+                else
+                {
+                    $Results.Remove('DeviceStatuses') | Out-Null
+                }
+            }
+            if ($Results.GroupAssignments)
+            {
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.GroupAssignments -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnerdeviceconfigurationgroupassignment
+                if ($complexTypeStringResult)
+                {
+                    $Results.GroupAssignments = $complexTypeStringResult
+                }
+                else
+                {
+                    $Results.Remove('GroupAssignments') | Out-Null
+                }
+            }
+            if ($Results.UserStatuses)
+            {
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.UserStatuses -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnerdeviceconfigurationuserstatus
+                if ($complexTypeStringResult)
+                {
+                    $Results.UserStatuses = $complexTypeStringResult
+                }
+                else
+                {
+                    $Results.Remove('UserStatuses') | Out-Null
+                }
+            }
+
+            if($Results.Assignments)
+            {
+                $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.Assignments -CIMInstanceName IntuneWifiConfigurationPolicyAndroidEntrepriseDeviceOwnerAssignments
                 if ($complexTypeStringResult)
                 {
                     $Results.Assignments = $complexTypeStringResult
@@ -813,15 +1194,78 @@ function Export-TargetResource
                 -Results $Results `
                 -Credential $Credential
 
+            if ($Results.DeviceManagementApplicabilityRuleDeviceMode)
+            {
+                $isCIMArray=$false
+                if($Results.DeviceManagementApplicabilityRuleDeviceMode.getType().Fullname -like "*[[\]]")
+                {
+                    $isCIMArray=$true
+                }
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "DeviceManagementApplicabilityRuleDeviceMode" -isCIMArray:$isCIMArray
+            }
+            if ($Results.DeviceManagementApplicabilityRuleOsEdition)
+            {
+                $isCIMArray=$false
+                if($Results.DeviceManagementApplicabilityRuleOsEdition.getType().Fullname -like "*[[\]]")
+                {
+                    $isCIMArray=$true
+                }
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "DeviceManagementApplicabilityRuleOsEdition" -isCIMArray:$isCIMArray
+            }
+            if ($Results.DeviceManagementApplicabilityRuleOsVersion)
+            {
+                $isCIMArray=$false
+                if($Results.DeviceManagementApplicabilityRuleOsVersion.getType().Fullname -like "*[[\]]")
+                {
+                    $isCIMArray=$true
+                }
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "DeviceManagementApplicabilityRuleOsVersion" -isCIMArray:$isCIMArray
+            }
+            if ($Results.DeviceSettingStateSummaries)
+            {
+                $isCIMArray=$false
+                if($Results.DeviceSettingStateSummaries.getType().Fullname -like "*[[\]]")
+                {
+                    $isCIMArray=$true
+                }
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "DeviceSettingStateSummaries" -isCIMArray:$isCIMArray
+            }
+            if ($Results.DeviceStatuses)
+            {
+                $isCIMArray=$false
+                if($Results.DeviceStatuses.getType().Fullname -like "*[[\]]")
+                {
+                    $isCIMArray=$true
+                }
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "DeviceStatuses" -isCIMArray:$isCIMArray
+            }
+            if ($Results.GroupAssignments)
+            {
+                $isCIMArray=$false
+                if($Results.GroupAssignments.getType().Fullname -like "*[[\]]")
+                {
+                    $isCIMArray=$true
+                }
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "GroupAssignments" -isCIMArray:$isCIMArray
+            }
+            if ($Results.UserStatuses)
+            {
+                $isCIMArray=$false
+                if($Results.UserStatuses.getType().Fullname -like "*[[\]]")
+                {
+                    $isCIMArray=$true
+                }
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "UserStatuses" -isCIMArray:$isCIMArray
+            }
 
             if ($Results.Assignments)
             {
                 $isCIMArray = $false
-                if ($Results.Assignments.getType().Fullname -like '*[[\]]')
+                if ($Results.Assignments.getType().Fullname -like "*[[\]]")
                 {
                     $isCIMArray = $true
                 }
-                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName 'Assignments' -IsCIMArray:$isCIMArray
+                $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "Assignments" -isCIMArray:$isCIMArray
             }
 
             $dscContent += $currentDSCBlock
@@ -859,315 +1303,6 @@ function Export-TargetResource
     }
 }
 
-
-function Get-M365DSCDRGComplexTypeToHashtable
-{
-    [CmdletBinding()]
-    param(
-        [Parameter()]
-        $ComplexObject
-    )
-
-    if ($null -eq $ComplexObject)
-    {
-        return $null
-    }
-
-    if ($ComplexObject.gettype().fullname -like '*[[\]]')
-    {
-        $results = @()
-
-        foreach ($item in $ComplexObject)
-        {
-            if ($item)
-            {
-                $hash = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $item
-                $results += $hash
-            }
-        }
-        if ($results.count -eq 0)
-        {
-            return $null
-        }
-        return $results
-    }
-
-    $results = @{}
-    $keys = $ComplexObject | Get-Member | Where-Object -FilterScript { $_.MemberType -eq 'Property' -and $_.Name -ne 'AdditionalProperties' }
-
-    foreach ($key in $keys)
-    {
-        if ($ComplexObject.$($key.Name))
-        {
-            $results.Add($key.Name, $ComplexObject.$($key.Name))
-        }
-    }
-    if ($results.count -eq 0)
-    {
-        return $null
-    }
-    return $results
-}
-
-function Get-M365DSCDRGComplexTypeToString
-{
-    [CmdletBinding()]
-    #[OutputType([System.String])]
-    param(
-        [Parameter()]
-        $ComplexObject,
-
-        [Parameter(Mandatory = $true)]
-        [System.String]
-        $CIMInstanceName,
-
-        [Parameter()]
-        [System.String]
-        $Whitespace = '',
-
-        [Parameter()]
-        [switch]
-        $isArray = $false
-    )
-    if ($null -eq $ComplexObject)
-    {
-        return $null
-    }
-
-    #If ComplexObject  is an Array
-    if ($ComplexObject.GetType().FullName -like '*[[\]]')
-    {
-        $currentProperty = @()
-        foreach ($item in $ComplexObject)
-        {
-            $currentProperty += Get-M365DSCDRGComplexTypeToString `
-                -ComplexObject $item `
-                -isArray:$true `
-                -CIMInstanceName $CIMInstanceName `
-                -Whitespace '                '
-
-        }
-        if ([string]::IsNullOrEmpty($currentProperty))
-        {
-            return $null
-        }
-        return $currentProperty
-
-    }
-
-    #If ComplexObject is a single CIM Instance
-    if (-Not (Test-M365DSCComplexObjectHasValues -ComplexObject $ComplexObject))
-    {
-        return $null
-    }
-    $currentProperty = ''
-    if ($isArray)
-    {
-        $currentProperty += "`r`n"
-    }
-    $currentProperty += "$whitespace`MSFT_$CIMInstanceName{`r`n"
-    $keyNotNull = 0
-    foreach ($key in $ComplexObject.Keys)
-    {
-        if ($ComplexObject[$key])
-        {
-            $keyNotNull++
-
-            if ($ComplexObject[$key].GetType().FullName -like 'Microsoft.Graph.PowerShell.Models.*')
-            {
-                $hashPropertyType = $ComplexObject[$key].GetType().Name.tolower()
-                $hashProperty = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $ComplexObject[$key]
-
-                if (Test-M365DSCComplexObjectHasValues -ComplexObject $hashProperty)
-                {
-                    $Whitespace += '            '
-                    if (-not $isArray)
-                    {
-                        $currentProperty += '                ' + $key + ' = '
-                    }
-                    $currentProperty += Get-M365DSCDRGComplexTypeToString `
-                        -ComplexObject $hashProperty `
-                        -CIMInstanceName $hashPropertyType `
-                        -Whitespace $Whitespace
-                }
-            }
-            else
-            {
-                if (-not $isArray)
-                {
-                    $Whitespace = '            '
-                }
-                $currentProperty += Get-M365DSCDRGSimpleObjectTypeToString -Key $key -Value $ComplexObject[$key] -Space ($Whitespace + '    ')
-            }
-        }
-    }
-    $currentProperty += '            }'
-
-    if ($keyNotNull -eq 0)
-    {
-        $currentProperty = $null
-    }
-
-    return $currentProperty
-}
-function Test-M365DSCComplexObjectHasValues
-{
-    [CmdletBinding()]
-    [OutputType([System.Boolean])]
-    param(
-        [Parameter(Mandatory = $true)]
-        [System.Collections.Hashtable]
-        $ComplexObject
-    )
-    $keys = $ComplexObject.keys
-    $hasValue = $false
-    foreach ($key in $keys)
-    {
-        if ($ComplexObject[$key])
-        {
-            if ($ComplexObject[$key].GetType().FullName -like 'Microsoft.Graph.PowerShell.Models.*')
-            {
-                $hash = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $ComplexObject[$key]
-                if (-Not $hash)
-                {
-                    return $false
-                }
-                $hasValue = Test-M365DSCComplexObjectHasValues -ComplexObject ($hash)
-            }
-            else
-            {
-                $hasValue = $true
-                return $hasValue
-            }
-        }
-    }
-    return $hasValue
-}
-Function Get-M365DSCDRGSimpleObjectTypeToString
-{
-    [CmdletBinding()]
-    [OutputType([System.String])]
-    param(
-        [Parameter(Mandatory = 'true')]
-        [System.String]
-        $Key,
-
-        [Parameter(Mandatory = 'true')]
-        $Value,
-
-        [Parameter()]
-        [System.String]
-        $Space = '                '
-
-    )
-
-    $returnValue = ''
-    switch -Wildcard ($Value.GetType().Fullname )
-    {
-        '*.Boolean'
-        {
-            $returnValue = $Space + $Key + " = `$" + $Value.ToString() + "`r`n"
-        }
-        '*.String'
-        {
-            if ($key -eq '@odata.type')
-            {
-                $key = 'odataType'
-            }
-            $returnValue = $Space + $Key + " = '" + $Value + "'`r`n"
-        }
-        '*.DateTime'
-        {
-            $returnValue = $Space + $Key + " = '" + $Value + "'`r`n"
-        }
-        '*[[\]]'
-        {
-            $returnValue = $Space + $key + ' = @('
-            $whitespace = ''
-            $newline = ''
-            if ($Value.count -gt 1)
-            {
-                $returnValue += "`r`n"
-                $whitespace = $Space + '    '
-                $newline = "`r`n"
-            }
-            foreach ($item in $Value)
-            {
-                switch -Wildcard ($item.GetType().Fullname )
-                {
-                    '*.String'
-                    {
-                        $returnValue += "$whitespace'$item'$newline"
-                    }
-                    '*.DateTime'
-                    {
-                        $returnValue += "$whitespace'$item'$newline"
-                    }
-                    Default
-                    {
-                        $returnValue += "$whitespace$item$newline"
-                    }
-                }
-            }
-            if ($Value.count -gt 1)
-            {
-                $returnValue += "$Space)`r`n"
-            }
-            else
-            {
-                $returnValue += ")`r`n"
-
-            }
-        }
-        Default
-        {
-            $returnValue = $Space + $Key + ' = ' + $Value + "`r`n"
-        }
-    }
-    return $returnValue
-}
-function Rename-M365DSCCimInstanceODataParameter
-{
-    [CmdletBinding()]
-    [OutputType([System.Collections.Hashtable])]
-    param(
-        [Parameter(Mandatory = 'true')]
-        [System.Collections.Hashtable]
-        $Properties
-    )
-    $CIMparameters = $Properties.getEnumerator() | Where-Object -FilterScript { $_.value.GetType().Fullname -like '*CimInstance*' }
-    foreach ($CIMParam in $CIMparameters)
-    {
-        if ($CIMParam.value.GetType().Fullname -like '*[[\]]')
-        {
-            $CIMvalues = @()
-            foreach ($item in $CIMParam.value)
-            {
-                $CIMHash = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $item
-                $keys = ($CIMHash.clone()).keys
-                if ($keys -contains 'odataType')
-                {
-                    $CIMHash.add('@odata.type', $CIMHash.odataType)
-                    $CIMHash.remove('odataType')
-                }
-                $CIMvalues += $CIMHash
-            }
-            $Properties.($CIMParam.key) = $CIMvalues
-        }
-        else
-        {
-            $CIMHash = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $CIMParam.value
-            $keys = ($CIMHash.clone()).keys
-            if ($keys -contains 'odataType')
-            {
-                $CIMHash.add('@odata.type', $CIMHash.odataType)
-                $CIMHash.remove('odataType')
-                $Properties.($CIMParam.key) = $CIMHash
-            }
-        }
-    }
-    return $Properties
-}
 function Get-M365DSCAdditionalProperties
 {
     [CmdletBinding()]
@@ -1179,21 +1314,27 @@ function Get-M365DSCAdditionalProperties
     )
 
     $additionalProperties = @(
-        'ConnectAutomatically'
-        'ConnectWhenNetworkNameIsHidden'
-        'NetworkName'
-        'PreSharedKey'
-        'PreSharedKeyIsSet'
-        'ProxyAutomaticConfigurationUrl'
-        'ProxyExclusionList'
-        'ProxyManualAddress'
-        'ProxyManualPort'
-        'ProxySettings'
-        'Ssid'
-        'WiFiSecurityType'
+                "SupportsScopeTags"
+        "ConnectAutomatically"
+        "ConnectWhenNetworkNameIsHidden"
+        "NetworkName"
+        "Ssid"
+        "WiFiSecurityType"
+        "AuthenticationMethod"
+        "EapType"
+        "InnerAuthenticationProtocolForEapTtls"
+        "InnerAuthenticationProtocolForPeap"
+        "OuterIdentityPrivacyTemporaryValue"
+        "ProxyAutomaticConfigurationUrl"
+        "ProxySettings"
+        "TrustedServerCertificateNames"
+        "DeviceSettingStateSummaries"
+        "DeviceStatuses"
+        "GroupAssignments"
+        "UserStatuses"
 
     )
-    $results = @{'@odata.type' = '#microsoft.graph.androidDeviceOwnerWiFiConfiguration' }
+    $results = @{'@odata.type' = '#microsoft.graph.androidWorkProfileEnterpriseWiFiConfiguration' }
     $cloneProperties = $Properties.clone()
     foreach ($property in $cloneProperties.Keys)
     {
@@ -1234,285 +1375,65 @@ function Get-M365DSCAdditionalProperties
     }
     return $results
 }
-function Compare-M365DSCComplexObject
-{
-    [CmdletBinding()]
-    [OutputType([System.Boolean])]
-    param(
-        [Parameter()]
-        [System.Collections.Hashtable]
-        $Source,
-        [Parameter()]
-        [System.Collections.Hashtable]
-        $Target
-    )
 
-    $keys = $Source.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
-    foreach ($key in $keys)
-    {
-        Write-Verbose -Message "Comparing key: {$key}"
-        $skey = $key
-        if ($key -eq 'odataType')
-        {
-            $skey = '@odata.type'
-        }
-
-        #Marking Target[key] to null if empty complex object or array
-        if ($null -ne $Target[$key])
-        {
-            switch -Wildcard ($Target[$key].getType().Fullname )
-            {
-                'Microsoft.Graph.PowerShell.Models.*'
-                {
-                    $hashProperty = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Target[$key]
-                    if (-not (Test-M365DSCComplexObjectHasValues -ComplexObject $hashProperty))
-                    {
-                        $Target[$key] = $null
-                    }
-                }
-                '*[[\]]'
-                {
-                    if ($Target[$key].count -eq 0)
-                    {
-                        $Target[$key] = $null
-                    }
-                }
-            }
-        }
-        $sourceValue = $Source[$key]
-        $targetValue = $Target[$key]
-        #One of the item is null
-        if (($null -eq $Source[$skey]) -xor ($null -eq $Target[$key]))
-        {
-            if ($null -eq $Source[$skey])
-            {
-                $sourceValue = 'null'
-            }
-
-            if ($null -eq $Target[$key])
-            {
-                $targetValue = 'null'
-            }
-            Write-Verbose -Message "Configuration drift - key: $key Source{$sourceValue} Target{$targetValue}"
-            return $false
-        }
-        #Both source and target aren't null or empty
-        if (($null -ne $Source[$skey]) -and ($null -ne $Target[$key]))
-        {
-            if ($Source[$skey].getType().FullName -like '*CimInstance*')
-            {
-                #Recursive call for complex object
-                $compareResult = Compare-M365DSCComplexObject `
-                    -Source (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Source[$skey]) `
-                    -Target (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Target[$key])
-
-                if (-not $compareResult)
-                {
-                    Write-Verbose -Message "Configuration drift - key: $key Source{$sourceValue} Target{$targetValue}"
-                    return $false
-                }
-            }
-            else
-            {
-                #Simple object comparison
-                $referenceObject = $Target[$key]
-                $differenceObject = $Source[$skey]
-
-                $compareResult = Compare-Object `
-                    -ReferenceObject ($referenceObject) `
-                    -DifferenceObject ($differenceObject)
-
-                if ($null -ne $compareResult)
-                {
-                    Write-Verbose -Message "Configuration drift - key: $key Source{$sourceValue} Target{$targetValue}"
-                    return $false
-                }
-
-            }
-        }
-    }
-
-    return $true
-}
-
-function Convert-M365DSCDRGComplexTypeToHashtable
-{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = 'true')]
-        $ComplexObject
-    )
-
-    if ($ComplexObject.getType().Fullname -like '*[[\]]')
-    {
-        $results = @()
-        foreach ($item in $ComplexObject)
-        {
-            $hash = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $item
-            if (Test-M365DSCComplexObjectHasValues -ComplexObject $hash)
-            {
-                $results += $hash
-            }
-        }
-        if ($results.count -eq 0)
-        {
-            return $null
-        }
-        return $Results
-    }
-    $hashComplexObject = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $ComplexObject
-    if ($hashComplexObject)
-    {
-        $results = $hashComplexObject.clone()
-        $keys = $hashComplexObject.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
-        foreach ($key in $keys)
-        {
-            if (($null -ne $hashComplexObject[$key]) -and ($hashComplexObject[$key].getType().Fullname -like '*CimInstance*'))
-            {
-                $results[$key] = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $hashComplexObject[$key]
-            }
-            if ($null -eq $results[$key])
-            {
-                $results.remove($key) | Out-Null
-            }
-
-        }
-    }
-    return $results
-}
-function Get-MgDeviceManagementPolicyAssignments
-{
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = 'true')]
-        [System.String]
-        $DeviceManagementPolicyId,
-
-        [Parameter()]
-        [ValidateSet('deviceCompliancePolicies', 'intents', 'configurationPolicies', 'deviceConfigurations')]
-        [System.String]
-        $Repository = 'configurationPolicies',
-
-        [Parameter()]
-        [ValidateSet('v1.0', 'beta')]
-        [System.String]
-        $APIVersion = 'beta'
-    )
-    try
-    {
-        $deviceManagementPolicyAssignments = @()
-
-        $Uri = "https://graph.microsoft.com/$APIVersion/deviceManagement/$Repository/$DeviceManagementPolicyId/assignments"
-        $results = Invoke-MgGraphRequest -Method GET  -Uri $Uri -ErrorAction Stop
-        foreach ($result in $results.value.target)
-        {
-            $deviceManagementPolicyAssignments += @{
-                dataType                                   = $result.'@odata.type'
-                groupId                                    = $result.groupId
-                collectionId                               = $result.collectionId
-                deviceAndAppManagementAssignmentFilterType = $result.deviceAndAppManagementAssignmentFilterType
-                deviceAndAppManagementAssignmentFilterId   = $result.deviceAndAppManagementAssignmentFilterId
-            }
-        }
-
-        while ($results.'@odata.nextLink')
-        {
-            $Uri = $results.'@odata.nextLink'
-            $results = Invoke-MgGraphRequest -Method GET -Uri $Uri -ErrorAction Stop
-            foreach ($result in $results.value.target)
-            {
-                $deviceManagementPolicyAssignments += @{
-                    dataType                                   = $result.'@odata.type'
-                    groupId                                    = $result.groupId
-                    collectionId                               = $result.collectionId
-                    deviceAndAppManagementAssignmentFilterType = $result.deviceAndAppManagementAssignmentFilterType
-                    deviceAndAppManagementAssignmentFilterId   = $result.deviceAndAppManagementAssignmentFilterId
-                }
-            }
-        }
-        return $deviceManagementPolicyAssignments
-    }
-    catch
-    {
-        try
-        {
-            Write-Verbose -Message $_
-            $tenantIdValue = ''
-            $tenantIdValue = $Credential.UserName.Split('@')[1]
-            Add-M365DSCEvent -Message $_ -EntryType 'Error' `
-                -EventID 1 -Source $($MyInvocation.MyCommand.Source) `
-                -TenantId $tenantIdValue
-        }
-        catch
-        {
-            Write-Verbose -Message $_
-        }
-        return $null
-    }
-
-
-}
-function Update-MgDeviceManagementPolicyAssignments
+function Update-DeviceConfigurationPolicyAssignment
 {
     [CmdletBinding()]
     [OutputType([System.Collections.Hashtable])]
     param (
         [Parameter(Mandatory = 'true')]
         [System.String]
-        $DeviceManagementPolicyId,
+        $DeviceConfigurationPolicyId,
 
         [Parameter()]
         [Array]
         $Targets,
 
         [Parameter()]
-        [ValidateSet('deviceCompliancePolicies', 'intents', 'configurationPolicies', 'deviceConfigurations')]
+        [ValidateSet('deviceCompliancePolicies','intents','configurationPolicies','deviceConfigurations')]
         [System.String]
-        $Repository = 'configurationPolicies',
+        $Repository='configurationPolicies',
 
         [Parameter()]
-        [ValidateSet('v1.0', 'beta')]
+        [ValidateSet('v1.0','beta')]
         [System.String]
-        $APIVersion = 'beta'
+        $APIVersion='beta'
     )
     try
     {
-        $deviceManagementPolicyAssignments = @()
+        $deviceManagementPolicyAssignments=@()
 
-        $Uri = "https://graph.microsoft.com/$APIVersion/deviceManagement/$Repository/$DeviceManagementPolicyId/assign"
+        $Uri = "https://graph.microsoft.com/$APIVersion/deviceManagement/$Repository/$DeviceConfigurationPolicyId/assign"
 
         foreach ($target in $targets)
         {
-            $formattedTarget = @{'@odata.type' = $target.dataType }
+            $formattedTarget = @{"@odata.type"=$target.dataType}
             if ($target.groupId)
             {
-                $formattedTarget.Add('groupId', $target.groupId)
+                $formattedTarget.Add('groupId',$target.groupId)
             }
             if ($target.collectionId)
             {
-                $formattedTarget.Add('collectionId', $target.collectionId)
+                $formattedTarget.Add('collectionId',$target.collectionId)
             }
             if ($target.deviceAndAppManagementAssignmentFilterType)
             {
-                $formattedTarget.Add('deviceAndAppManagementAssignmentFilterType', $target.deviceAndAppManagementAssignmentFilterType)
+                $formattedTarget.Add('deviceAndAppManagementAssignmentFilterType',$target.deviceAndAppManagementAssignmentFilterType)
             }
             if ($target.deviceAndAppManagementAssignmentFilterId)
             {
-                $formattedTarget.Add('deviceAndAppManagementAssignmentFilterId', $target.deviceAndAppManagementAssignmentFilterId)
+                $formattedTarget.Add('deviceAndAppManagementAssignmentFilterId',$target.deviceAndAppManagementAssignmentFilterId)
             }
-            $deviceManagementPolicyAssignments += @{'target' = $formattedTarget }
+            $deviceManagementPolicyAssignments += @{'target'= $formattedTarget}
         }
-        $body = @{'assignments' = $deviceManagementPolicyAssignments } | ConvertTo-Json -Depth 20
-        #write-verbose -Message $body
+        $body = @{'assignments' = $deviceManagementPolicyAssignments}|ConvertTo-Json -Depth 20
         Invoke-MgGraphRequest -Method POST -Uri $Uri -Body $body -ErrorAction Stop
-
     }
     catch
     {
         try
         {
-            Write-Verbose -Message $_
-            $tenantIdValue = ''
+            $tenantIdValue = ""
             $tenantIdValue = $Credential.UserName.Split('@')[1]
             Add-M365DSCEvent -Message $_ -EntryType 'Error' `
                 -EventID 1 -Source $($MyInvocation.MyCommand.Source) `
@@ -1522,9 +1443,8 @@ function Update-MgDeviceManagementPolicyAssignments
         {
             Write-Verbose -Message $_
         }
-        return $null
+        throw 'There was an issue trying to update the assignments for {$DeviceConfigurationPolicyId}'
     }
-
-
 }
+
 Export-ModuleMember -Function *-TargetResource

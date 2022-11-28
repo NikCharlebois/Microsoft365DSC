@@ -25,6 +25,10 @@
             RequiredVersion = '1.17.0'
         },
         @{
+            ModuleName      = 'Microsoft.Graph.DeviceManagement.Actions'
+            RequiredVersion = '1.17.0'
+        },
+        @{
             ModuleName      = 'Microsoft.Graph.DeviceManagement.Enrolment'
             RequiredVersion = '1.17.0'
         },
