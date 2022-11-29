@@ -81,11 +81,11 @@ class MSFT_IntuneAntivirusPolicyWindows10SettingCatalog : OMI_BaseResource
     [Write, Description("")] String Description;
     [Write, Description("")] Boolean IsAssigned;
     [Write, Description("")] String Name;
-    [Write, Description(""), ValueMap{"none","android","iOS","macOS","windows10X","windows10","linux","unknownFutureValue"}, Values{"none","android","iOS","macOS","windows10X","windows10","linux","unknownFutureValue"}] String Platforms;
+    [Write, Description(""), ValueMap{"none","android","iOS","macOS","windows10X","windows10","linux","unknownFutureValue"}, Values{"none","android","iOS","macOS","windows10X","windows10","linux","unknownFutureValue"}] String Platforms[];
     [Write, Description(""), EmbeddedInstance("MSFT_IntuneAntivirusPolicyWindows10SettingCatalogdevicemanagementprioritymetadata")] String PriorityMetaData;
     [Write, Description("")] String RoleScopeTagIds[];
     [Write, Description("")] UInt32 SettingCount;
-    [Write, Description(""), ValueMap{"none","mdm","windows10XManagement","configManager","appleRemoteManagement","microsoftSense","exchangeOnline","linuxMdm","enrollment","endpointPrivilegeManagement","unknownFutureValue"}, Values{"none","mdm","windows10XManagement","configManager","appleRemoteManagement","microsoftSense","exchangeOnline","linuxMdm","enrollment","endpointPrivilegeManagement","unknownFutureValue"}] String Technologies;
+    [Write, Description(""), ValueMap{"none","mdm","windows10XManagement","configManager","appleRemoteManagement","microsoftSense","exchangeOnline","linuxMdm","enrollment","endpointPrivilegeManagement","unknownFutureValue"}, Values{"none","mdm","windows10XManagement","configManager","appleRemoteManagement","microsoftSense","exchangeOnline","linuxMdm","enrollment","endpointPrivilegeManagement","unknownFutureValue"}] String Technologies[];
     [Write, Description(""), EmbeddedInstance("MSFT_IntuneAntivirusPolicyWindows10SettingCatalogdevicemanagementconfigurationpolicytemplatereference")] String TemplateReference;
     [Write, Description(""), EmbeddedInstance("MSFT_IntuneAntivirusPolicyWindows10SettingCatalogdevicemanagementconfigurationsetting")] String Settings[];
 

@@ -135,9 +135,9 @@ function Get-DerivedType
     $enumTypes = $CmdletDefinition | Where-Object -FilterScript { $_.ItemType -eq 'EnumType' }
     $complexTypes = $CmdletDefinition | Where-Object -FilterScript { $_.ItemType -eq 'complexType' }
 
-    if ($SelectionFilter.AdditionalPropertiesType.IsPresent)
+    if ($null -ne $SelectionFilter.AdditionalPropertiesType)
     {
-        $returnValue = $CmdletDefinition | Where-Object -FilterScript { $_.Name -eq $AdditionalPropertiesType }
+        $returnValue = $CmdletDefinition | Where-Object -FilterScript { $_.Name -eq $SelectionFilter.AdditionalPropertiesType }
     }
     if ($null -eq $returnValue)
     {
@@ -299,8 +299,8 @@ function Get-ParameterBlockInformation
 
     $Properties | ForEach-Object -Process {
         $property = $_
-        #$property.Name
         $isMandatory = $false
+
         # Replace this one with the proper mandatory key value
         $cmdletParameter = $DefaultParameterSetProperties | Where-Object -FilterScript { $_.Name -eq $property.Name }
         if ($null -ne $cmdletParameter `
@@ -314,12 +314,6 @@ function Get-ParameterBlockInformation
             $parameterAttribute = '[Parameter()]'
         }
 
-        <#if ($null -ne $cmdletParameter) {
-            $parameterType = Get-M365DSCDRGParameterType -Type $cmdletParameter.ParameterType.ToString()
-        }
-        else
-        {#>
-        #write-host ($property|out-string)
         $type = $property.Type
 
         switch -Wildcard ($type)
@@ -374,16 +368,20 @@ function Get-ParameterBlockInformation
             }
             Default
             {
-                #write-host ($property|out-string) -f Green
                 if ($property.Members)
                 {
-                    $type = 'System.String'
-
+                    ## HACK - If the property's name ends with 's' and is an enum, assume it is a string array instead.
+                    if ($property.Name.EndsWith('s'))
+                    {
+                        $type = 'System.String[]'
+                    }
+                    else
+                    {
+                        $type = 'System.String'
+                    }
                 }
                 elseif ($property.Properties)
                 {
-                    #write-host ($property|out-string) -f Green
-
                     try
                     {
                         $typeDefinition = (Invoke-Expression "[Microsoft.Graph.PowerShell.Models.IMicrosoftGraph$type]" -ErrorAction Stop)
@@ -427,7 +425,6 @@ function Get-ParameterBlockInformation
             $parameterDescription = ($PropertiesDefinitions | Where-Object -FilterScript { $_.id -like "*$parameterName" }).description
             if (-not [String]::IsNullOrEmpty($parameterDescription))
             {
-
                 $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x201C), "'"
                 $parameterDescription = $parameterDescription -replace [regex]::Escape([char]0x201D), "'"
                 $parameterDescription = $parameterDescription -replace [regex]::Escape('"'), "'"
@@ -445,6 +442,7 @@ function Get-ParameterBlockInformation
                     Name        = $parameterName
                     Description = $parameterDescription
                 }
+
                 if ($null -ne $property.Members -and $property.Members.count -gt 0)
                 {
                     $myParam.add('Members', $property.Members)
@@ -1174,7 +1172,8 @@ function New-M365DSCResource
     $hashtableResults = New-M365HashTableMapping -Properties $parameterInformation `
         -DefaultParameterSetProperties $defaultParameterSetProperties `
         -GraphNoun $GraphModuleCmdLetNoun `
-        -Workload $Workload
+        -Workload $Workload `
+        -SelectionFilter $SelectionFilter
     $hashTableMapping = $hashtableResults.StringContent
 
     #region UnitTests
@@ -1248,6 +1247,11 @@ function New-M365DSCResource
     if ($typeProperties.Name.ToLower().Contains("displayname"))
     {
         $SecondaryKey = 'DisplayName'
+        Write-TokenReplacement -Token '<SecondaryKey>' -Value $SecondaryKey  -FilePath $moduleFilePath
+    }
+    elseif ($null -eq $SecondaryKey -and $typeProperties.Name.ToLower().Contains("name"))
+    {
+        $SecondaryKey = 'Name'
         Write-TokenReplacement -Token '<SecondaryKey>' -Value $SecondaryKey  -FilePath $moduleFilePath
     }
     Write-TokenReplacement -Token '<ParameterBlock>' -Value $parameterString -FilePath $moduleFilePath
@@ -1517,7 +1521,7 @@ function Update-DeviceConfigurationPolicyAssignment
     {
         # If the resource contains a propriety named Priority, we can't call the main update- cmdlet and need to call into a
         # separate one to update the priority.
-        $CustomUpdateLogicBefore += "        [Array]`$keys = `$UpdateParameters.Keys.ToLower()`r`n"
+        <#$CustomUpdateLogicBefore += "        [Array]`$keys = `$UpdateParameters.Keys.ToLower()`r`n"
         $CustomUpdateLogicBefore += "        if (`$keys.Contains('priority'))`r`n"
         $CustomUpdateLogicBefore += "        {`r`n"
         $CustomUpdateLogicBefore += "            Write-Verbose -Message `"Update parameters contain 'Priority'`"`r`n"
@@ -1525,12 +1529,28 @@ function Update-DeviceConfigurationPolicyAssignment
         $CustomUpdateLogicBefore += "            `$UpdateParameters.Remove('priority') | Out-Null`r`n"
         $CustomUpdateLogicBefore += "        }`r`n"
 
-        $CustomUpdateLogicAfter += "        #Set-$GraphModuleCmdLetNoun" + "Priority -$($updateKeyIdentifier.Name) `$currentInstance.Id ```r`n"
-        $CustomUpdateLogicAfter += "            #-Priority `$PriorityValue`r`n"
+        $CustomUpdateLogicAfter += ""#>
+
+        # Decide if we need to include the Get-M365DSCAdditionalProperties from the template or not.
+        if ($null -ne $SelectionFilter.AdditionalPropertiesType)
+        {
+            Write-TokenReplacement -Token '<#StartAdditionalPropertiesRequired' -Value '' -FilePath $moduleFilePath
+            Write-TokenReplacement -Token 'EndAdditionalPropertiesRequired#>' -Value '' -FilePath $moduleFilePath
+        }
+        else
+        {
+            $content = Get-Content -Path $moduleFilePath -Raw
+            $start = $content.IndexOf("<#StartAdditionalPropertiesRequired")
+            if ($start -gt -1)
+            {
+                $end = $content.IndexOf("EndAdditionalPropertiesRequired#>", $start) + ("EndAdditionalPropertiesRequired#>").Length
+                $content = $content.Remove($start, $end-$start)
+                Set-Content -Path $moduleFilePath -Value $content
+            }
+        }
     }
 
-
-    Write-TokenReplacement -Token '<AssignmentsParam>' -Value $AssignmentsParam -FilePath $moduleFilePath
+    Write-TokenReplacement -Token '<#AssignmentsParam#>' -Value $AssignmentsParam -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsGet#>' -Value $AssignmentsGet -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsRemove#>' -Value $AssignmentsRemove -FilePath $moduleFilePath
     Write-TokenReplacement -Token '<#AssignmentsSet#>' -Value $AssignmentsSet -FilePath $moduleFilePath
@@ -2117,7 +2137,11 @@ function New-M365HashTableMapping
         # Parameter help description
         [Parameter()]
         [System.Object]
-        $DefaultParameterSetProperties
+        $DefaultParameterSetProperties,
+
+        [Parameter()]
+        [System.Collections.Hashtable]
+        $SelectionFilter
     )
 
     $newCmdlet = Get-Command "New-$GraphNoun"
@@ -2128,12 +2152,15 @@ function New-M365HashTableMapping
     $convertToString = ''
     $convertToVariable = ''
     $addtionalProperties = ''
+    $hashtableValues = @()
+
     foreach ($property in $properties)
     {
+        $UseAdditionalProperties = $false
         $cmdletParameter = $DefaultParameterSetProperties | Where-Object -FilterScript { $_.Name -eq $property.Name }
-        if ($null -eq $cmdletParameter)
+        if ($null -eq $cmdletParameter -and $null -ne $SelectionFilter.AdditionalPropertiesType)
         {
-            $UseAddtionalProperties = $true
+            $UseAdditionalProperties = $true
         }
         if ($property.Name -ne 'CreatedDateTime' -and $property.Name -ne 'LastModifiedDateTime')
         {
@@ -2146,7 +2173,7 @@ function New-M365HashTableMapping
                 $CimInstanceName = $CimInstanceName -replace '[[\]]', ''
                 $CimInstanceName = $ResourceName + $CimInstanceName
 
-                if ($UseAddtionalProperties)
+                if ($UseAdditionalProperties)
                 {
                     $propertyName = $property.Name
                     $propertyNameFirstLetter = $property.Name.Substring(0, 1)
@@ -2192,7 +2219,7 @@ function New-M365HashTableMapping
             }
             else
             {
-                if ($UseAddtionalProperties)
+                if ($UseAdditionalProperties)
                 {
                     $propertyName = $property.Name
                     $propertyNameFirstLetter = $property.Name.Substring(0, 1)
@@ -2204,10 +2231,64 @@ function New-M365HashTableMapping
                 }
                 else
                 {
-                    $hashtable += "            $($parameterName) = `$getValue.$($property.Name)`r`n"
+                    if ($paramType -eq 'System.String')
+                    {
+                        $currentEntry = @{
+                            $parameterName = "if (`$null -ne `$getValue.$parameterName){`$getValue.$parameterName.ToString()}else{`$null}`r`n"
+                        }
+                    }
+                    elseif ($paramType -eq 'System.String[]')
+                    {
+                        $currentEntry = @{
+                            $parameterName = "if (`$getValue.$parameterName.GetType().BaseType.Name -eq 'ValueType'){`$getValue.$parameterName.ToString().Split(',')}else{`$getValue.$parameterName}`r`n"
+                        }
+                    }
+                    else
+                    {
+                        $currentEntry = @{
+                            $parameterName = "`$getValue.$parameterName`r`n"
+                        }
+                    }
+                    $hashtableValues += $currentEntry
                 }
             }
         }
+    }
+
+    if ($workload -eq 'Intune')
+    {
+        $hashtableValues += @{ Ensure = "'Present'`r`n" }
+        $hashtableValues += @{ Credential = "`$Credential`r`n" }
+        $hashtableValues += @{ ApplicationId = "`$ApplicationId`r`n" }
+        $hashtableValues += @{ TenantId = "`$TenantId`r`n" }
+        $hashtableValues += @{ ApplicationSecret = "`$ApplicationSecret`r`n" }
+        $hashtableValues += @{ CertificateThumbprint = "`$CertificateThumbprint`r`n" }
+        $hashtableValues += @{ Managedidentity = "`$ManagedIdentity.IsPresent`r`n" }
+    }
+
+    # Get Longuest property name.
+    $LonguestPropertyName = 0
+    foreach ($entry in $hashtableValues)
+    {
+        if ($entry.Keys[0].Length -gt $LonguestPropertyName)
+        {
+            $LonguestPropertyName = $entry.Keys[0].Length
+        }
+    }
+    foreach ($entry in $hashtableValues)
+    {
+        $currentKey = $entry.Keys[0]
+        $spacePadding = ""
+        for ($i = 0; $i -lt ($LonguestPropertyName - $currentKey.Length); $i++)
+        {
+            $spacePadding += " "
+        }
+        $hashtable += "            $currentKey$spacePadding = $($entry.Values[0])"
+    }
+
+    if ($hashtable.EndsWith("`r`n"))
+    {
+        $hashtable = $hashtable.Substring(0, $hashtable.Length - 2)
     }
 
     $results.Add('ConvertToVariable', $convertToVariable)
@@ -2251,6 +2332,11 @@ function Get-ParameterBlockStringForModule
             {
                 $parameterBlockOutput += '        [System.Boolean'
             }
+            elseif ($_.Name.EndsWith('s') -and $_null -ne $_.Members -and $_.Type -eq 'System.String')
+            {
+                ## HACK: If the property name ends with an 's' and it is an enum, assume it is an array instead of a single string.
+                $parameterBlockOutput += "        [$($_.Type)[]"
+            }
             else
             {
                 $parameterBlockOutput += "        [$($_.Type.replace('[]',''))"
@@ -2263,6 +2349,10 @@ function Get-ParameterBlockStringForModule
             $parameterBlockOutput += "        `$$($_.Name),`r`n"
             $parameterBlockOutput += "`r`n"
         }
+    }
+    if ($parameterBlockOutput.EndsWith("`r`n"))
+    {
+        $parameterBlockOutput = $parameterBlockOutput.Substring(0, $parameterBlockOutput.Length -2)
     }
     return $parameterBlockOutput
 }

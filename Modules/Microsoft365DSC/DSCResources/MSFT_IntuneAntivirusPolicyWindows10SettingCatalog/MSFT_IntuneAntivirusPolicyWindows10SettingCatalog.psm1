@@ -4,7 +4,6 @@ function Get-TargetResource
     [OutputType([System.Collections.Hashtable])]
     param
     (
-        #region resource generator code
         [Parameter()]
         [System.String]
         $Id,
@@ -27,7 +26,7 @@ function Get-TargetResource
 
         [Parameter()]
         [ValidateSet('none','android','iOS','macOS','windows10X','windows10','linux','unknownFutureValue')]
-        [System.String]
+        [System.String[]]
         $Platforms,
 
         [Parameter()]
@@ -44,7 +43,7 @@ function Get-TargetResource
 
         [Parameter()]
         [ValidateSet('none','mdm','windows10XManagement','configManager','appleRemoteManagement','microsoftSense','exchangeOnline','linuxMdm','enrollment','endpointPrivilegeManagement','unknownFutureValue')]
-        [System.String]
+        [System.String[]]
         $Technologies,
 
         [Parameter()]
@@ -54,10 +53,6 @@ function Get-TargetResource
         [Parameter()]
         [Microsoft.Management.Infrastructure.CimInstance[]]
         $Settings,
-
-
-
-        #endregion 
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -119,8 +114,7 @@ function Get-TargetResource
     try
     {
         $getValue = $null
-        
-        #region resource generator code
+
         $getValue = $null
         if ($id)
         {
@@ -133,11 +127,11 @@ function Get-TargetResource
             {
                 Write-Verbose -Message "Nothing with id {$id} was found"
             }
-            Write-Verbose -Message "Getting instance by {<SecondaryKey>} = {$<SecondaryKey>}"
-            $getValue = Get-MgDeviceManagementConfigurationPolicy -Filter "<SecondaryKey> eq '$<SecondaryKey>'" -ErrorAction SilentlyContinue
+            Write-Verbose -Message "Getting instance by {Name} = {$Name}"
+            $getValue = Get-MgDeviceManagementConfigurationPolicy -Filter "Name eq '$Name'" -ErrorAction SilentlyContinue
             if ($null -ne $getValue)
             {
-                Write-Verbose -Message "Found instance with <SecondaryKey> = {$<SecondaryKey>}"
+                Write-Verbose -Message "Found instance with Name = {$Name}"
             }
         }
         else
@@ -145,26 +139,24 @@ function Get-TargetResource
             Write-Verbose -Message "Found instance with id = {$id}"
         }
         #endregion
-        
+
         if ($null -eq $getValue)
         {
-            Write-Verbose -Message "No instances were found with either id or <SecondaryKey>"
+            Write-Verbose -Message "No instances were found with either id or Name"
             return $nullResult
         }
 
         $results = @{
             #region resource generator code
-            Id = $getValue.Id
-            CreationSource = $getValue.CreationSource
-            Description = $getValue.Description
-            IsAssigned = $getValue.AdditionalProperties.isAssigned
-            Name = $getValue.AdditionalProperties.name
-            Platforms = $getValue.AdditionalProperties.platforms
-            RoleScopeTagIds = $getValue.AdditionalProperties.roleScopeTagIds
-            SettingCount = $getValue.AdditionalProperties.settingCount
-            Technologies = $getValue.AdditionalProperties.technologies
-
-            
+            Id                    = if ($null -ne $getValue.Id){$getValue.Id.ToString()}else{$null}
+            CreationSource        = if ($null -ne $getValue.CreationSource){$getValue.CreationSource.ToString()}else{$null}
+            Description           = if ($null -ne $getValue.Description){$getValue.Description.ToString()}else{$null}
+            IsAssigned            = $getValue.IsAssigned
+            Name                  = if ($null -ne $getValue.Name){$getValue.Name.ToString()}else{$null}
+            Platforms             = if ($getValue.Platforms.GetType().BaseType.Name -eq 'ValueType'){$getValue.Platforms.ToString().Split(',')}else{$getValue.Platforms}
+            RoleScopeTagIds       = if ($getValue.RoleScopeTagIds.GetType().BaseType.Name -eq 'ValueType'){$getValue.RoleScopeTagIds.ToString().Split(',')}else{$getValue.RoleScopeTagIds}
+            SettingCount          = $getValue.SettingCount
+            Technologies          = if ($getValue.Technologies.GetType().BaseType.Name -eq 'ValueType'){$getValue.Technologies.ToString().Split(',')}else{$getValue.Technologies}
             Ensure                = 'Present'
             Credential            = $Credential
             ApplicationId         = $ApplicationId
@@ -173,19 +165,18 @@ function Get-TargetResource
             CertificateThumbprint = $CertificateThumbprint
             Managedidentity       = $ManagedIdentity.IsPresent
         }
-        if ($getValue.additionalProperties.priorityMetaData)
+        if ($getValue.PriorityMetaData)
         {
-            $results.Add("PriorityMetaData", $getValue.additionalProperties.priorityMetaData)
+            $results.Add("PriorityMetaData", (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $getValue.PriorityMetaData))
         }
-        if ($getValue.additionalProperties.templateReference)
+        if ($getValue.TemplateReference)
         {
-            $results.Add("TemplateReference", $getValue.additionalProperties.templateReference)
+            $results.Add("TemplateReference", (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $getValue.TemplateReference))
         }
-        if ($getValue.additionalProperties.settings)
+        if ($getValue.Settings)
         {
-            $results.Add("Settings", $getValue.additionalProperties.settings)
+            $results.Add("Settings", (Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $getValue.Settings))
         }
-
 
         return [System.Collections.Hashtable] $results
     }
@@ -220,8 +211,6 @@ function Set-TargetResource
     [CmdletBinding()]
     param
     (
-        
-        #region resource generator code
         [Parameter()]
         [System.String]
         $Id,
@@ -244,7 +233,7 @@ function Set-TargetResource
 
         [Parameter()]
         [ValidateSet('none','android','iOS','macOS','windows10X','windows10','linux','unknownFutureValue')]
-        [System.String]
+        [System.String[]]
         $Platforms,
 
         [Parameter()]
@@ -261,7 +250,7 @@ function Set-TargetResource
 
         [Parameter()]
         [ValidateSet('none','mdm','windows10XManagement','configManager','appleRemoteManagement','microsoftSense','exchangeOnline','linuxMdm','enrollment','endpointPrivilegeManagement','unknownFutureValue')]
-        [System.String]
+        [System.String[]]
         $Technologies,
 
         [Parameter()]
@@ -271,10 +260,6 @@ function Set-TargetResource
         [Parameter()]
         [Microsoft.Management.Infrastructure.CimInstance[]]
         $Settings,
-
-
-
-        #endregion 
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -319,7 +304,7 @@ function Set-TargetResource
         Write-Verbose -Message $_
     }
 
-    #Ensure the proper dependencies are installed in the current environment.
+    # Ensure the proper dependencies are installed in the current environment.
     Confirm-M365DSCDependencies
 
     #region Telemetry
@@ -343,56 +328,28 @@ function Set-TargetResource
 
     if ($Ensure -eq 'Present' -and $currentInstance.Ensure -eq 'Absent')
     {
-        Write-Verbose -Message "Creating {$DisplayName}"
+        Write-Verbose -Message "Creating {$Name}"
 
-        $CreateParameters = ([Hashtable]$PSBoundParameters).clone()
+        $CreateParameters = ([Hashtable]$PSBoundParameters).Clone()
         $CreateParameters = Rename-M365DSCCimInstanceODataParameter -Properties $CreateParameters
-
-        <#$AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($CreateParameters)
-        foreach ($key in $AdditionalProperties.keys)
-        {
-            if ($key -ne '@odata.type')
-            {
-                $keyName = $key.substring(0, 1).ToUpper() + $key.substring(1, $key.length - 1)
-                $CreateParameters.remove($keyName)
-            }
-        }#>
-
         $CreateParameters.Remove('Id') | Out-Null
         $CreateParameters.Remove('Verbose') | Out-Null
 
-        <#foreach ($key in ($CreateParameters.clone()).Keys)
+        $keys = (([Hashtable]$CreateParameters).clone()).Keys
+        foreach ($key in $keys)
         {
-            if ($CreateParameters[$key].getType().Fullname -like '*CimInstance*')
+            $keyName = $key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
+            $keyValue = $CreateParameters.$key
+            if ($null -ne $CreateParameters.$key -and $CreateParameters.$key.getType().Name -like "*cimInstance*")
             {
-                $CreateParameters[$key] = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters[$key]
+                $keyValue = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters.$key
             }
-        }#>
-
-        $keys=(([Hashtable]$CreateParameters).clone()).Keys
-        foreach($key in $keys)
-        {
-            $keyName=$key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
-            $keyValue= $CreateParameters.$key
-            if($null -ne $CreateParameters.$key -and $CreateParameters.$key.getType().Name -like "*cimInstance*")
-            {
-                $keyValue= Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters.$key
-            }
-            $CreateParameters.remove($key)
-            $CreateParameters.add($keyName,$keyValue)
+            $CreateParameters.Remove($key) | Out-Null
+            $CreateParameters.Add($keyName,$keyValue)
         }
-        $CreateParameters.add('@odata.type','#microsoft.graph.deviceManagementConfigurationPolicy')
-
-        <#if ($AdditionalProperties)
-        {
-            $CreateParameters.add('AdditionalProperties', $AdditionalProperties)
-        }#>
-        
-        #region resource generator code
+        $CreateParameters.Add('@odata.type','#microsoft.graph.deviceManagementConfigurationPolicy')
+        Write-Verbose -Message "Creating New Instance with parameters:`r`n$(Convert-M365DscHashtableToString -Hashtable $CreateParameters)"
         $currentInstance = New-MgDeviceManagementConfigurationPolicy -BodyParameter $CreateParameters
-
-        #endregion
-        
     }
     elseif ($Ensure -eq 'Present' -and $currentInstance.Ensure -eq 'Present')
     {
@@ -400,80 +357,31 @@ function Set-TargetResource
 
         $UpdateParameters = ([Hashtable]$PSBoundParameters).clone()
         $UpdateParameters = Rename-M365DSCCimInstanceODataParameter -Properties $UpdateParameters
-
-        <#$AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($UpdateParameters)
-        foreach ($key in $AdditionalProperties.keys)
-        {
-            if ($key -ne '@odata.type')
-            {
-                $keyName = $key.substring(0, 1).ToUpper() + $key.substring(1, $key.length - 1)
-                $UpdateParameters.remove($keyName)
-            }
-        }#>
-
         $UpdateParameters.Remove('Id') | Out-Null
         $UpdateParameters.Remove('Verbose') | Out-Null
 
-        <#foreach ($key in ($UpdateParameters.clone()).Keys)
+        $keys = (([Hashtable]$UpdateParameters).clone()).Keys
+        foreach ($key in $keys)
         {
-            if ($UpdateParameters[$key].getType().Fullname -like '*CimInstance*')
+            $keyName = $key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
+            $keyValue = $UpdateParameters.$key
+            if ($null -ne $UpdateParameters.$key -and $UpdateParameters.$key.getType().Name -like "*cimInstance*")
             {
-                $UpdateParameters[$key] = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters[$key]
+                $keyValue = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters.$key
             }
-        }#>
-
-        $keys=(([Hashtable]$UpdateParameters).clone()).Keys
-        foreach($key in $keys)
-        {
-            $keyName=$key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
-            $keyValue= $UpdateParameters.$key
-            if($null -ne $UpdateParameters.$key -and $UpdateParameters.$key.getType().Name -like "*cimInstance*")
-            {
-                $keyValue= Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters.$key
-            }
-            $UpdateParameters.remove($key)
-            $UpdateParameters.add($keyName,$keyValue)
+            $UpdateParameters.Remove($key) | Out-Null
+            $UpdateParameters.Add($keyName,$keyValue)
         }
-        $UpdateParameters.add('@odata.type','#microsoft.graph.deviceManagementConfigurationPolicy')
+        $UpdateParameters.Add('@odata.type','#microsoft.graph.deviceManagementConfigurationPolicy')
 
-        <#if ($AdditionalProperties)
-        {
-            $UpdateParameters.add('AdditionalProperties', $AdditionalProperties)
-        }#>
-        [Array]$keys = $UpdateParameters.Keys.ToLower()
-        if ($keys.Contains('priority'))
-        {
-            Write-Verbose -Message "Update parameters contain 'Priority'"
-            $PriorityValue = $UpdateParameters.priority
-            $UpdateParameters.Remove('priority') | Out-Null
-        }
-
-        
-        #region resource generator code
         Write-Verbose -Message "Updating {$($currentInstance.Id)} with`r`n$($UpdateParameters | Out-String)"
         Update-MgDeviceManagementConfigurationPolicy -BodyParameter $UpdateParameters `
             -DeviceManagementConfigurationPolicyId $currentInstance.Id
-
-        #endregion
-        
-        #Set-MgDeviceManagementConfigurationPolicyPriority -DeviceManagementConfigurationPolicyId $currentInstance.Id `
-            #-Priority $PriorityValue
-
     }
     elseif ($Ensure -eq 'Absent' -and $currentInstance.Ensure -eq 'Present')
     {
         Write-Verbose -Message "Removing {$DisplayName}"
-
-        
-        #region resource generator code
-        #endregion
-        
-
-        
-        #region resource generator code
         Remove-MgDeviceManagementConfigurationPolicy -DeviceManagementConfigurationPolicyId $currentInstance.Id
-        #endregion
-        
     }
 }
 
@@ -483,8 +391,6 @@ function Test-TargetResource
     [OutputType([System.Boolean])]
     param
     (
-        
-        #region resource generator code
         [Parameter()]
         [System.String]
         $Id,
@@ -507,7 +413,7 @@ function Test-TargetResource
 
         [Parameter()]
         [ValidateSet('none','android','iOS','macOS','windows10X','windows10','linux','unknownFutureValue')]
-        [System.String]
+        [System.String[]]
         $Platforms,
 
         [Parameter()]
@@ -524,7 +430,7 @@ function Test-TargetResource
 
         [Parameter()]
         [ValidateSet('none','mdm','windows10XManagement','configManager','appleRemoteManagement','microsoftSense','exchangeOnline','linuxMdm','enrollment','endpointPrivilegeManagement','unknownFutureValue')]
-        [System.String]
+        [System.String[]]
         $Technologies,
 
         [Parameter()]
@@ -534,10 +440,6 @@ function Test-TargetResource
         [Parameter()]
         [Microsoft.Management.Infrastructure.CimInstance[]]
         $Settings,
-
-
-
-        #endregion 
 
         [Parameter(Mandatory = $true)]
         [System.String]
@@ -585,9 +487,9 @@ function Test-TargetResource
     {
         Write-Verbose -Message "Testing configuration of {$id}"
     }
-    elseif ($<SecondaryKey>)
+    elseif ($Name)
     {
-        Write-Verbose -Message "Testing configuration of {$<SecondaryKey>}"
+        Write-Verbose -Message "Testing configuration of {$Name}"
     }
 
     $CurrentValues = Get-TargetResource @PSBoundParameters
@@ -705,7 +607,6 @@ function Export-TargetResource
 
     try
     {
-        #region resource generator code
         [array]$getValue = Get-MgDeviceManagementConfigurationPolicy `
             -All `
             -ErrorAction Stop | Where-Object `
@@ -718,7 +619,6 @@ function Export-TargetResource
                 -All `
                 -ErrorAction Stop
         }
-        #endregion
 
         $i = 1
         $dscContent = ''
@@ -732,10 +632,10 @@ function Export-TargetResource
         }
         foreach ($config in $getValue)
         {
-            $displayedKey=$config.id
-            if(-not [String]::IsNullOrEmpty($config.displayName))
+            $displayedKey = $config.id
+            if (-not [String]::IsNullOrEmpty($config.Name))
             {
-                $displayedKey=$config.displayName
+                $displayedKey = $config.Name
             }
             Write-Host "    |---[$i/$($getValue.Count)] $displayedKey" -NoNewline
             $params = @{
@@ -752,7 +652,6 @@ function Export-TargetResource
             $Results = Get-TargetResource @Params
             $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
                 -Results $Results
-
             if ($Results.PriorityMetaData)
             {
                 $complexTypeStringResult = Get-M365DSCDRGComplexTypeToString -ComplexObject $Results.PriorityMetaData -CIMInstanceName IntuneAntivirusPolicyWindows10SettingCatalogdevicemanagementprioritymetadata
@@ -790,14 +689,11 @@ function Export-TargetResource
                 }
             }
 
-
-
             $currentDSCBlock = Get-M365DSCExportContentForResource -ResourceName $ResourceName `
                 -ConnectionMode $ConnectionMode `
                 -ModulePath $PSScriptRoot `
                 -Results $Results `
                 -Credential $Credential
-
             if ($Results.PriorityMetaData)
             {
                 $isCIMArray=$false
@@ -825,8 +721,6 @@ function Export-TargetResource
                 }
                 $currentDSCBlock = Convert-DSCStringParamToVariable -DSCBlock $currentDSCBlock -ParameterName "Settings" -isCIMArray:$isCIMArray
             }
-
-
 
             $dscContent += $currentDSCBlock
             Save-M365DSCPartialExport -Content $currentDSCBlock `
@@ -863,70 +757,5 @@ function Export-TargetResource
     }
 }
 
-function Get-M365DSCAdditionalProperties
-{
-    [CmdletBinding()]
-    [OutputType([System.Collections.Hashtable])]
-    param(
-        [Parameter(Mandatory = 'true')]
-        [System.Collections.Hashtable]
-        $Properties
-    )
-
-    $additionalProperties = @(
-                "IsAssigned"
-        "Name"
-        "Platforms"
-        "PriorityMetaData"
-        "RoleScopeTagIds"
-        "SettingCount"
-        "Technologies"
-        "TemplateReference"
-        "Settings"
-
-    )
-    $results = @{'@odata.type' = '#microsoft.graph.deviceManagementConfigurationPolicy' }
-    $cloneProperties = $Properties.clone()
-    foreach ($property in $cloneProperties.Keys)
-    {
-        if ($property -in ($additionalProperties) )
-        {
-            $propertyName = $property[0].ToString().ToLower() + $property.Substring(1, $property.Length - 1)
-            if ($properties.$property -and $properties.$property.getType().FullName -like '*CIMInstance*')
-            {
-                if ($properties.$property.getType().FullName -like '*[[\]]')
-                {
-                    $array = @()
-                    foreach ($item in $properties.$property)
-                    {
-                        $array += Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $item
-
-                    }
-                    $propertyValue = $array
-                }
-                else
-                {
-                    $propertyValue = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $properties.$property
-                }
-
-            }
-            else
-            {
-                $propertyValue = $properties.$property
-            }
-
-
-            $results.Add($propertyName, $propertyValue)
-
-        }
-    }
-    if ($results.Count -eq 1)
-    {
-        return $null
-    }
-    return $results
-}
-
-
-
 Export-ModuleMember -Function *-TargetResource
+

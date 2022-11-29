@@ -4,11 +4,7 @@ function Get-TargetResource
     [OutputType([System.Collections.Hashtable])]
     param
     (<#ResourceGenerator
-        #region resource generator code
-<ParameterBlock>
-<AssignmentsParam>
-        #endregion ResourceGenerator#>
-
+<ParameterBlock><#AssignmentsParam#>ResourceGenerator#>
         [Parameter(Mandatory = $true)]
         [System.String]
         [ValidateSet('Absent', 'Present')]
@@ -69,8 +65,7 @@ function Get-TargetResource
     try
     {
         $getValue = $null
-        <#ResourceGenerator
-        #region resource generator code
+<#ResourceGenerator
         $getValue = $null
         if ($<PrimaryKey>)
         {
@@ -94,8 +89,8 @@ function Get-TargetResource
         {
             Write-Verbose -Message "Found instance with <PrimaryKey> = {$<PrimaryKey>}"
         }
-        #endregion
-        ResourceGenerator#>
+        #endregionResourceGenerator#>
+
         if ($null -eq $getValue)
         {
             Write-Verbose -Message "No instances were found with either <PrimaryKey> or <SecondaryKey>"
@@ -104,19 +99,10 @@ function Get-TargetResource
 
         $results = @{<#ResourceGenerator
             #region resource generator code
-<HashTableMapping>
-            ResourceGenerator#>
-            Ensure                = 'Present'
-            Credential            = $Credential
-            ApplicationId         = $ApplicationId
-            TenantId              = $TenantId
-            ApplicationSecret     = $ApplicationSecret
-            CertificateThumbprint = $CertificateThumbprint
-            Managedidentity       = $ManagedIdentity.IsPresent
+<HashTableMapping>ResourceGenerator#>
         }
 <#ComplexTypeContent#>
-<#AssignmentsGet#>
-        return [System.Collections.Hashtable] $results
+<#AssignmentsGet#>        return [System.Collections.Hashtable] $results
     }
     catch
     {
@@ -148,13 +134,8 @@ function Set-TargetResource
 {
     [CmdletBinding()]
     param
-    (
-        <#ResourceGenerator
-        #region resource generator code
-<ParameterBlock>
-<AssignmentsParam>
-        #endregion ResourceGenerator#>
-
+    (<#ResourceGenerator
+<ParameterBlock><#AssignmentsParam#>ResourceGenerator#>
         [Parameter(Mandatory = $true)]
         [System.String]
         [ValidateSet('Absent', 'Present')]
@@ -198,7 +179,7 @@ function Set-TargetResource
         Write-Verbose -Message $_
     }
 
-    #Ensure the proper dependencies are installed in the current environment.
+    # Ensure the proper dependencies are installed in the current environment.
     Confirm-M365DSCDependencies
 
     #region Telemetry
@@ -222,56 +203,28 @@ function Set-TargetResource
 
     if ($Ensure -eq 'Present' -and $currentInstance.Ensure -eq 'Absent')
     {
-        Write-Verbose -Message "Creating {$DisplayName}"
+        Write-Verbose -Message "Creating {$<SecondaryKey>}"
 <#AssignmentsRemove#>
-        $CreateParameters = ([Hashtable]$PSBoundParameters).clone()
+        $CreateParameters = ([Hashtable]$PSBoundParameters).Clone()
         $CreateParameters = Rename-M365DSCCimInstanceODataParameter -Properties $CreateParameters
-
-        <#$AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($CreateParameters)
-        foreach ($key in $AdditionalProperties.keys)
-        {
-            if ($key -ne '@odata.type')
-            {
-                $keyName = $key.substring(0, 1).ToUpper() + $key.substring(1, $key.length - 1)
-                $CreateParameters.remove($keyName)
-            }
-        }#>
-
         $CreateParameters.Remove('Id') | Out-Null
         $CreateParameters.Remove('Verbose') | Out-Null
 
-        <#foreach ($key in ($CreateParameters.clone()).Keys)
+        $keys = (([Hashtable]$CreateParameters).clone()).Keys
+        foreach ($key in $keys)
         {
-            if ($CreateParameters[$key].getType().Fullname -like '*CimInstance*')
+            $keyName = $key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
+            $keyValue = $CreateParameters.$key
+            if ($null -ne $CreateParameters.$key -and $CreateParameters.$key.getType().Name -like "*cimInstance*")
             {
-                $CreateParameters[$key] = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters[$key]
+                $keyValue = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters.$key
             }
-        }#>
-
-        $keys=(([Hashtable]$CreateParameters).clone()).Keys
-        foreach($key in $keys)
-        {
-            $keyName=$key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
-            $keyValue= $CreateParameters.$key
-            if($null -ne $CreateParameters.$key -and $CreateParameters.$key.getType().Name -like "*cimInstance*")
-            {
-                $keyValue= Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters.$key
-            }
-            $CreateParameters.remove($key)
-            $CreateParameters.add($keyName,$keyValue)
+            $CreateParameters.Remove($key) | Out-Null
+            $CreateParameters.Add($keyName,$keyValue)
         }
-        $CreateParameters.add('@odata.type','#microsoft.graph.<ODataType>')
-
-        <#if ($AdditionalProperties)
-        {
-            $CreateParameters.add('AdditionalProperties', $AdditionalProperties)
-        }#>
-        <#ResourceGenerator
-        #region resource generator code
-        $currentInstance = <NewCmdLetName> -BodyParameter $CreateParameters
-<#AssignmentsSet#>
-        #endregion
-        ResourceGenerator#>
+        $CreateParameters.Add('@odata.type','#microsoft.graph.<ODataType>')
+        Write-Verbose -Message "Creating New Instance with parameters:`r`n$(Convert-M365DscHashtableToString -Hashtable $CreateParameters)"
+<#ResourceGenerator        $currentInstance = <NewCmdLetName> -BodyParameter $CreateParameters<#AssignmentsSet#>ResourceGenerator#>
     }
     elseif ($Ensure -eq 'Present' -and $currentInstance.Ensure -eq 'Present')
     {
@@ -279,71 +232,31 @@ function Set-TargetResource
 <#AssignmentsRemove#>
         $UpdateParameters = ([Hashtable]$PSBoundParameters).clone()
         $UpdateParameters = Rename-M365DSCCimInstanceODataParameter -Properties $UpdateParameters
-
-        <#$AdditionalProperties = Get-M365DSCAdditionalProperties -Properties ($UpdateParameters)
-        foreach ($key in $AdditionalProperties.keys)
-        {
-            if ($key -ne '@odata.type')
-            {
-                $keyName = $key.substring(0, 1).ToUpper() + $key.substring(1, $key.length - 1)
-                $UpdateParameters.remove($keyName)
-            }
-        }#>
-
         $UpdateParameters.Remove('Id') | Out-Null
         $UpdateParameters.Remove('Verbose') | Out-Null
 
-        <#foreach ($key in ($UpdateParameters.clone()).Keys)
+        $keys = (([Hashtable]$UpdateParameters).clone()).Keys
+        foreach ($key in $keys)
         {
-            if ($UpdateParameters[$key].getType().Fullname -like '*CimInstance*')
+            $keyName = $key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
+            $keyValue = $UpdateParameters.$key
+            if ($null -ne $UpdateParameters.$key -and $UpdateParameters.$key.getType().Name -like "*cimInstance*")
             {
-                $UpdateParameters[$key] = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters[$key]
+                $keyValue = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters.$key
             }
-        }#>
-
-        $keys=(([Hashtable]$UpdateParameters).clone()).Keys
-        foreach($key in $keys)
-        {
-            $keyName=$key.substring(0,1).toLower()+$key.substring(1,$key.length-1)
-            $keyValue= $UpdateParameters.$key
-            if($null -ne $UpdateParameters.$key -and $UpdateParameters.$key.getType().Name -like "*cimInstance*")
-            {
-                $keyValue= Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $UpdateParameters.$key
-            }
-            $UpdateParameters.remove($key)
-            $UpdateParameters.add($keyName,$keyValue)
+            $UpdateParameters.Remove($key) | Out-Null
+            $UpdateParameters.Add($keyName,$keyValue)
         }
-        $UpdateParameters.add('@odata.type','#microsoft.graph.<ODataType>')
-
-        <#if ($AdditionalProperties)
-        {
-            $UpdateParameters.add('AdditionalProperties', $AdditionalProperties)
-        }#>
+        $UpdateParameters.Add('@odata.type','#microsoft.graph.<ODataType>')
 <#CustomUpdateLogicBefore#>
-        <#ResourceGenerator
-        #region resource generator code
-        Write-Verbose -Message "Updating {$($currentInstance.Id)} with`r`n$($UpdateParameters | Out-String)"
+<#ResourceGenerator        Write-Verbose -Message "Updating {$($currentInstance.Id)} with`r`n$($UpdateParameters | Out-String)"
         <UpdateCmdLetName> -BodyParameter $UpdateParameters `
-            -<#UpdateKeyIdentifier#> $currentInstance.Id
-<#AssignmentsSet#>
-        #endregion
-        ResourceGenerator#>
-<#CustomUpdateLogicAfter#>
+            -<#UpdateKeyIdentifier#> $currentInstance.Id<#AssignmentsSet#>ResourceGenerator#><#CustomUpdateLogicAfter#>
     }
     elseif ($Ensure -eq 'Absent' -and $currentInstance.Ensure -eq 'Present')
     {
         Write-Verbose -Message "Removing {$DisplayName}"
-
-        <#ResourceGenerator
-        #region resource generator code
-        #endregion
-        ResourceGenerator#>
-
-        <#ResourceGenerator
-        #region resource generator code
-        <RemoveCmdLetName> -<#UpdateKeyIdentifier#> $currentInstance.Id
-        #endregion
-        ResourceGenerator#>
+<#ResourceGenerator        <RemoveCmdLetName> -<#UpdateKeyIdentifier#> $currentInstance.IdResourceGenerator#>
     }
 }
 
@@ -352,13 +265,8 @@ function Test-TargetResource
     [CmdletBinding()]
     [OutputType([System.Boolean])]
     param
-    (
-        <#ResourceGenerator
-        #region resource generator code
-<ParameterBlock>
-<AssignmentsParam>
-        #endregion ResourceGenerator#>
-
+    (<#ResourceGenerator
+<ParameterBlock><#AssignmentsParam#>ResourceGenerator#>
         [Parameter(Mandatory = $true)]
         [System.String]
         [ValidateSet('Absent', 'Present')]
@@ -525,7 +433,6 @@ function Export-TargetResource
 
     try
     {<#ResourceGenerator
-        #region resource generator code
         [array]$getValue = <GetCmdLetName> `
             -All `
             -ErrorAction Stop | Where-Object `
@@ -533,7 +440,6 @@ function Export-TargetResource
                 <FilterScriptShort> `
             }
 <NonIntuneResource>
-        #endregion
 ResourceGenerator#>
         $i = 1
         $dscContent = ''
@@ -547,10 +453,10 @@ ResourceGenerator#>
         }
         foreach ($config in $getValue)
         {
-            $displayedKey=$config.<PrimaryKey>
-            if(-not [String]::IsNullOrEmpty($config.displayName))
+            $displayedKey = $config.<PrimaryKey>
+            if (-not [String]::IsNullOrEmpty($config.<SecondaryKey>))
             {
-                $displayedKey=$config.displayName
+                $displayedKey = $config.<SecondaryKey>
             }
             Write-Host "    |---[$i/$($getValue.Count)] $displayedKey" -NoNewline
             $params = @{
@@ -567,19 +473,13 @@ ResourceGenerator#>
             $Results = Get-TargetResource @Params
             $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
                 -Results $Results
-
-<#ConvertComplexToString#>
-<#AssignmentsConvertComplexToString#>
-
+<#ConvertComplexToString#><#AssignmentsConvertComplexToString#>
             $currentDSCBlock = Get-M365DSCExportContentForResource -ResourceName $ResourceName `
                 -ConnectionMode $ConnectionMode `
                 -ModulePath $PSScriptRoot `
                 -Results $Results `
                 -Credential $Credential
-
-<#ConvertComplexToVariable#>
-<#AssignmentsConvertComplexToVariable#>
-
+<#ConvertComplexToVariable#><#AssignmentsConvertComplexToVariable#>
             $dscContent += $currentDSCBlock
             Save-M365DSCPartialExport -Content $currentDSCBlock `
                 -FileName $Global:PartialExportFileName
@@ -613,8 +513,7 @@ ResourceGenerator#>
         }
         return ''
     }
-}
-
+}<#StartAdditionalPropertiesRequired
 function Get-M365DSCAdditionalProperties
 {
     [CmdletBinding()]
@@ -668,8 +567,6 @@ function Get-M365DSCAdditionalProperties
         return $null
     }
     return $results
-}
-
+}EndAdditionalPropertiesRequired#>
 <#AssignmentsFunctions#>
-
 Export-ModuleMember -Function *-TargetResource

@@ -4012,7 +4012,14 @@ function Get-M365DSCDRGComplexTypeToHashtable
             }
             else
             {
-                $results.Add($keyName, $ComplexObject.$($key.Name))
+                try
+                {
+                    $results.Add($keyName, $ComplexObject.$($key.Name).ToString())
+                }
+                catch
+                {
+                    $results.Add($keyName, $ComplexObject.$($key.Name))
+                }
             }
             $allNull = $false
         }
