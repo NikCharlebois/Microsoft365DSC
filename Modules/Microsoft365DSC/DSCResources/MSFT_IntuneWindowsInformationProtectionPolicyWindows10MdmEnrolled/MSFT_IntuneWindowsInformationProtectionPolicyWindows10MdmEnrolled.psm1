@@ -101,6 +101,14 @@ function Get-TargetResource
         [Parameter()]
         [System.String]
         $Description,
+
+        [Parameter()]
+        [System.String[]]
+        $AssignmentsIncludedGroups,
+
+        [Parameter()]
+        [System.String[]]
+        $AssignmentsExcludedGroups,
         #endregion
 
         [Parameter()]
@@ -156,7 +164,9 @@ function Get-TargetResource
 
         $getValue = $null
         #region resource generator code
-        $getValue = Get-MgDeviceAppMgtMdmWindowInformationProtectionPolicy -MdmWindowsInformationProtectionPolicyId $Id -ErrorAction SilentlyContinue
+        $getValue = Get-MgDeviceAppMgtMdmWindowInformationProtectionPolicy -MdmWindowsInformationProtectionPolicyId $Id `
+            -ExpandProperty 'Assignments' `
+            -ErrorAction SilentlyContinue
 
         if ($null -eq $getValue)
         {
@@ -166,6 +176,7 @@ function Get-TargetResource
             {
                 $getValue = Get-MgDeviceAppMgtMdmWindowInformationProtectionPolicy `
                     -Filter "DisplayName eq '$DisplayName'" `
+                    -ExpandProperty 'Assignments' `
                     -ErrorAction SilentlyContinue
             }
         }
@@ -369,6 +380,28 @@ function Get-TargetResource
         }
         #endregion
 
+        #region Assignments
+        $assignments = $getValue.Assignments
+        [string[]]$included = $assignments.Id | Where-Object -FilterScript {$_.EndsWith('_incl')}
+        [string[]]$excluded = $assignments.Id | Where-Object -FilterScript {$_.EndsWith('_excl')}
+
+        [string[]]$includedValue = @()
+        foreach($group in $included)
+        {
+            $groupId = $group.Split('_')[0]
+            $groupInfo = Get-MgGroup -GroupId $groupId
+            $includedValue += $groupInfo.DisplayName
+        }
+
+        [string[]]$excludedValue = @()
+        foreach($group in $excluded)
+        {
+            $groupId = $group.Split('_')[0]
+            $groupInfo = Get-MgGroup -GroupId $groupId
+            $excludedValue += $groupInfo.DisplayName
+        }
+        #endregion
+
         $results = @{
             #region resource generator code
             AzureRightsManagementServicesAllowed   = $getValue.AzureRightsManagementServicesAllowed
@@ -395,6 +428,8 @@ function Get-TargetResource
             Description                            = $getValue.Description
             DisplayName                            = $getValue.DisplayName
             Id                                     = $getValue.Id
+            AssignmentsExcludedGroups              = $excludedValue
+            AssignmentsIncludedGroups              = $includedValue
             Ensure                                 = 'Present'
             Credential                             = $Credential
             ApplicationId                          = $ApplicationId
@@ -521,6 +556,15 @@ function Set-TargetResource
         [Parameter()]
         [System.String]
         $Description,
+
+        [Parameter()]
+        [System.String[]]
+        $AssignmentsIncludedGroups,
+
+        [Parameter()]
+        [System.String[]]
+        $AssignmentsExcludedGroups,
+
         #endregion
 
         [Parameter(Mandatory)]
@@ -625,7 +669,6 @@ function Set-TargetResource
     elseif ($Ensure -eq 'Absent' -and $currentInstance.Ensure -eq 'Present')
     {
         Write-Verbose -Message "Removing the Intune Windows Information Protection Policy for Windows10 Mdm Enrolled with Id {$($currentInstance.Id)}"
-
         #region resource generator code
         Remove-MgDeviceAppMgtMdmWindowInformationProtectionPolicy -MdmWindowsInformationProtectionPolicyId $currentInstance.Id
         #endregion
@@ -735,6 +778,15 @@ function Test-TargetResource
         [Parameter()]
         [System.String]
         $Description,
+
+        [Parameter()]
+        [System.String[]]
+        $AssignmentsIncludedGroups,
+
+        [Parameter()]
+        [System.String[]]
+        $AssignmentsExcludedGroups,
+
         #endregion
 
         [Parameter()]
