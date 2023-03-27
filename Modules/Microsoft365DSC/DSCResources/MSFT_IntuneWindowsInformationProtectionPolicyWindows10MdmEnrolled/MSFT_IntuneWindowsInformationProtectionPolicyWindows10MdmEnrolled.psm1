@@ -620,6 +620,24 @@ function Set-TargetResource
     $PSBoundParameters.Remove('ManagedIdentity') | Out-Null
     $PSBoundParameters.Remove('Verbose') | Out-Null
 
+    [string[]]$assignmentsValue = @()
+    foreach ($group in $AssignmentIncludedGroups)
+    {
+        $groupInfo = Get-MgGroup -Filter "DisplayName eq '$group'"
+        if ($null -ne $group)
+        {
+            $assignmentsValue += $groupInfo.Id + "_incl"
+        }
+    }
+    foreach ($group in $AssignmentExcludedGroups)
+    {
+        $groupInfo = Get-MgGroup -Filter "DisplayName eq '$group'"
+        if ($null -ne $group)
+        {
+            $assignmentsValue += $groupInfo.Id + "_excl"
+        }
+    }
+
     if ($Ensure -eq 'Present' -and $currentInstance.Ensure -eq 'Absent')
     {
         Write-Verbose -Message "Creating an Intune Windows Information Protection Policy for Windows10 Mdm Enrolled with DisplayName {$DisplayName}"
@@ -636,6 +654,10 @@ function Set-TargetResource
                 $CreateParameters.$key = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $CreateParameters.$key
             }
         }
+
+        $CreateParameters.Add("Assignments", $assignmentsValue)
+        $CreateParameters.Remove("AssignmentsExcludedGroups") | Out-Null
+        $CreateParameters.Remove("AssignmentsIncludedGroups") | Out-Null
 
         #region resource generator code
         $policy = New-MgDeviceAppMgtMdmWindowInformationProtectionPolicy -BodyParameter $CreateParameters
@@ -659,11 +681,15 @@ function Set-TargetResource
             }
         }
 
+        $UpdateParameters.Add("Assignments", $assignmentsValue)
+        $UpdateParameters.Remove("AssignmentsExcludedGroups") | Out-Null
+        $UpdateParameters.Remove("AssignmentsIncludedGroups") | Out-Null
+
         #region resource generator code
-        $UpdateParameters.Add('@odata.type', '#microsoft.graph.MdmWindowsInformationProtectionPolicy')
+        #$UpdateParameters.Add('@odata.type', '#microsoft.graph.MdmWindowsInformationProtectionPolicy')
         Update-MgDeviceAppMgtMdmWindowInformationProtectionPolicy  `
             -MdmWindowsInformationProtectionPolicyId $currentInstance.Id `
-            -BodyParameter $UpdateParameters
+            @UpdateParameters
         #endregion
     }
     elseif ($Ensure -eq 'Absent' -and $currentInstance.Ensure -eq 'Present')
