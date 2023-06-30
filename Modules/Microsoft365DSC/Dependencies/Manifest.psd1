@@ -53,6 +53,10 @@
             RequiredVersion = '1.28.0'
         },
         @{
+            ModuleName      = 'Microsoft.Graph.Search'
+            RequiredVersion = '1.28.0'
+        },
+        @{
             ModuleName      = 'Microsoft.Graph.Teams'
             RequiredVersion = '1.28.0'
         },

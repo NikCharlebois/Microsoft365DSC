@@ -1,0 +1,41 @@
+[ClassVersion("1.0.0")]
+class MSFT_O365SearchBookmarkKeyword
+{
+    [Write, Description("A collection of keywords used to trigger the search answer.")] String Keywords[];
+    [Write, Description("If true, indicates that the search term contains similar words to the keywords that should trigger the search answer.")] Boolean MatchSimilarKeywords;
+    [Write, Description("Unique keywords that will guarantee the search answer is triggered.")] String ReservedKeywords[];
+};
+
+[ClassVersion("1.0.0")]
+class MSFT_O365SearchBookmarkVariation
+{
+    [Write, Description("Answer variation name displayed in search results.")] String DisplayName;
+    [Write, Description("Answer variation description shown on search results page.")] String Description;
+    [Write, Description("Answer variation URL link. When users click this answer variation in search results, they will go to this URL.")] String WebUrl;
+    [Write, Description("Country or region able to view this search answer.")] String LanguageTag;
+    [Write, Description("Operating systems able to view this answer variation. Possible values are: unknown, ios, android, windows, windowsMobile, macOS."), ValueMap{"unknown", "ios", "android", "windows", "windowsMobile", "macOS"}, Values{"unknown", "ios", "android", "windows", "windowsMobile", "macOS"}] String Platform;
+};
+
+[ClassVersion("1.0.0.0"), FriendlyName("O365SearchBookmark")]
+class MSFT_O365SearchBookmark : OMI_BaseResource
+{
+    [Key, Description("Bookmark name displayed in search results.")] String DisplayName;
+    [Required, Description("Bookmark URL link. When users click this bookmark in search results, they will go to this URL.")] String WebUrl;
+    [Write, Description("Bookmark description shown on search results page.")] String Description;
+    [Write, Description("Categories commonly used to describe this bookmark. For example, IT and HR.")] String Categories[];
+    [Write, Description("Timestamp of when the bookmark will start to appear as a search result. Set as null for always available.")] String AvailabilityStartDateTime;
+    [Write, Description("Timestamp of when the bookmark will stop to appear as a search result. Set as null for always available.")] String AvailabilityEndDateTime;
+    [Write, Description("List of countries or regions able to view this bookmark.")] String LanguageTags[];
+    [Write, Description("List of devices and operating systems able to view this bookmark. Possible values are: unknown, android, androidForWork, ios, macOS, windowsPhone81, windowsPhone81AndLater, windows10AndLater, androidWorkProfile, androidASOP."), ValueMap{"unknown", "android", "androidForWork", "ios", "macOS", "windowsPhone81", "windowsPhone81AndLater", "windows10AndLater", "androidWorkProfile", "androidASOP"}, Values{"unknown", "android", "androidForWork", "ios", "macOS", "windowsPhone81", "windowsPhone81AndLater", "windows10AndLater", "androidWorkProfile", "androidASOP"}] String Platforms[];
+    [Write, Description("Variations of a bookmark for different countries or devices. Use when you need to show different content to users based on their device, country/region, or both. The date and group settings will apply to all variations."), EmbeddedInstance("MSFT_O365SearchBookmarkVariation")] String TargetedVariations[];
+    [Write, Description("List of Power Apps associated with this bookmark. If users add existing Power Apps to a bookmark, they can complete tasks, such as to enter vacation time or to report expenses on the search results page.")] String PowerAppsIds[];
+    [Write, Description("Keywords that trigger this bookmark to appear in search results."), EmbeddedInstance("MSFT_O365SearchBookmarkKeyword")] String Keywords;
+    [Write, Description("State of the bookmark. Possible values are: published, draft, excluded, or unknownFutureValue."), ValueMap{"published", "draft", "excluded", "unknownFutureValue"}, Values{"published", "draft", "excluded", "unknownFutureValue"}] String State;
+    [Write, Description("List of security groups able to view this bookmark.")] String GroupIds[];
+    [Write, Description("Credentials of the Azure AD Admin"), EmbeddedInstance("MSFT_Credential")] string Credential;
+    [Write, Description("Id of the Azure Active Directory application to authenticate with.")] String ApplicationId;
+    [Write, Description("Id of the Azure Active Directory tenant used for authentication.")] String TenantId;
+    [Write, Description("Secret of the Azure Active Directory application to authenticate with."), EmbeddedInstance("MSFT_Credential")] String ApplicationSecret;
+    [Write, Description("Thumbprint of the Azure Active Directory application's authentication certificate to use for authentication.")] String CertificateThumbprint;
+    [Write, Description("Managed ID being used for authentication.")] Boolean ManagedIdentity;
+};
