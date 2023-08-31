@@ -1,0 +1,52 @@
+[ClassVersion("1.0.0")]
+class MSFT_AADDeviceExtensionAttribute
+{
+    [Write, Description("1st customizable extension attribute.")] String ExtensionAttribute1;
+    [Write, Description("2nd customizable extension attribute.")] String ExtensionAttribute2;
+    [Write, Description("3rd customizable extension attribute.")] String ExtensionAttribute3;
+    [Write, Description("4th customizable extension attribute.")] String ExtensionAttribute4;
+    [Write, Description("5th customizable extension attribute.")] String ExtensionAttribute5;
+    [Write, Description("6th customizable extension attribute.")] String ExtensionAttribute6;
+    [Write, Description("7th customizable extension attribute.")] String ExtensionAttribute7;
+    [Write, Description("8th customizable extension attribute.")] String ExtensionAttribute8;
+    [Write, Description("9th customizable extension attribute.")] String ExtensionAttribute9;
+    [Write, Description("10th customizable extension attribute.")] String ExtensionAttribute10;
+    [Write, Description("11th customizable extension attribute.")] String ExtensionAttribute11;
+    [Write, Description("12th customizable extension attribute.")] String ExtensionAttribute12;
+    [Write, Description("13th customizable extension attribute.")] String ExtensionAttribute13;
+    [Write, Description("14th customizable extension attribute.")] String ExtensionAttribute14;
+    [Write, Description("15th customizable extension attribute.")] String ExtensionAttribute15;
+};
+
+[ClassVersion("1.0.0")]
+class MSFT_AADDeviceAlternativeSecurityId
+{
+    [Write, Description("")] UInt32 type;
+    [Write, Description("")] String key;
+};
+
+[ClassVersion("1.0.0.0"), FriendlyName("AADDevice")]
+class MSFT_AADDevice : OMI_BaseResource
+{
+    [Key, Description("The display name for the device.")] String DisplayName;
+    [Write, Description("The unique identifier for the device. Inherited from directoryObject. Key, Not nullable.")] String Id;
+    [Write, Description("True if the account is enabled; otherwise, false. Required. Default is true.")] Boolean AccountEnabled;
+    [Write, Description("User-defined property set by Intune to automatically add devices to groups and simplify managing devices.")] String DeviceCategory;
+    [Required, Description("Unique identifier set by Azure Device Registration Service at the time of registration. This is an alternate key that can be used to reference the device object.")] String DeviceId;
+    [Write, Description("Ownership of the device. This property is set by Intune. Possible values are: unknown, company, personal."), ValueMap{"unknown","company","personal"}, Values{"unknown","company","personal"}] String DeviceOwnership;
+    [Write, Description("Enrollment profile applied to the device. For example, Apple Device Enrollment Profile, Device enrollment - Corporate device identifiers, or Windows Autopilot profile name. This property is set by Intune.")] String EnrollmentProfileName;
+    [Write, Description("Contains extension attributes 1-15 for the device. The individual extension attributes are not selectable. These properties are mastered in cloud and can be set during creation or update of a device object in Azure AD."), EmbeddedInstance("MSFT_AADDeviceExtensionAttribute")] String ExtensionAttributes;
+    [Write, Description("Alternative Security Id of the device."), EmbeddedInstance("MSFT_AADDeviceAlternativeSecurityId")] String AlternativeSecurityIds[];
+    [Write, Description("True if the device is managed by a Mobile Device Management (MDM) app; otherwise, false.")] Boolean IsManaged;
+    [Required, Description("The type of operating system on the device.")] String OperatingSystem;
+    [Required, Description("The version of the operating system on the device.")] String OperatingSystemVersion;
+    [Write, Description("The profile type of the device. Possible values: RegisteredDevice (default), SecureVM, Printer, Shared, IoT."), ValueMap{"RegisteredDevice","SecureVM","Shared","IoT"}, Values{"RegisteredDevice","SecureVM","Shared","IoT"}] String ProfileType;
+    [Write, Description("List of labels applied to the device by the system.")] String SystemLabels[];
+    [Write, Description("Specify that the Azure Authorization Policy should exist."), ValueMap{"Present"}, Values{"Present"}] String Ensure;
+    [Write, Description("Credentials for the Microsoft Graph delegated permissions."), EmbeddedInstance("MSFT_Credential")] String Credential;
+    [Write, Description("Id of the Azure Active Directory application to authenticate with.")] String ApplicationId;
+    [Write, Description("Id of the Azure Active Directory tenant used for authentication.")] String TenantId;
+    [Write, Description("Secret of the Azure Active Directory application to authenticate with."), EmbeddedInstance("MSFT_Credential")] String ApplicationSecret;
+    [Write, Description("Thumbprint of the Azure Active Directory application's authentication certificate to use for authentication.")] String CertificateThumbprint;
+    [Write, Description("Managed ID being used for authentication.")] Boolean ManagedIdentity;
+};

@@ -1,5 +1,10 @@
 # Change log for Microsoft365DSC
 
+# UNRELEASED
+
+* AADDevice
+  * Initial release;
+
 # 1.23.830.1
 
 * O365SearchAndintelligenceConfigurations
