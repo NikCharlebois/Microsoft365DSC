@@ -10,7 +10,12 @@
 
         [Parameter(Mandatory = $true)]
         [System.String]
-        $RoleDefinition,
+        $GroupId,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('owner', 'member', 'unknownFutureValue')]
+        [System.String]
+        $AccessId,
 
         [Parameter()]
         [ValidateSet('User', 'Group')]
@@ -23,24 +28,12 @@
 
         [Parameter()]
         [System.String]
-        $DirectoryScopeId,
-
-        [Parameter()]
-        [System.String]
-        $AppScopeId,
+        $Justification,
 
         [Parameter()]
         [ValidateSet("adminAssign", "adminUpdate", "adminRemove", "selfActivate", "selfDeactivate", "adminExtend", "adminRenew", "selfExtend", "selfRenew", "unknownFutureValue")]
         [System.String]
         $Action,
-
-        [Parameter()]
-        [System.String]
-        $Justification,
-
-        [Parameter()]
-        [System.Boolean]
-        $IsValidationOnly,
 
         [Parameter()]
         [Microsoft.Management.Infrastructure.CimInstance]
@@ -114,8 +107,8 @@
             }
             else
             {
-                Write-Verbose -Message "Getting Role Eligibility by Id {$Id}"
-                $request = Get-MgBetaRoleManagementDirectoryRoleEligibilityScheduleRequest -UnifiedRoleEligibilityScheduleRequestId $Id `
+                Write-Verbose -Message "Getting Group Eligibility by Id {$Id}"
+                $request = Get-MgIdentityGovernancePrivilegedAccessGroupEligibilityScheduleRequest -PrivilegedAccessGroupEligibilityScheduleRequestId $Id `
                     -ErrorAction SilentlyContinue
             }
         }
@@ -124,7 +117,7 @@
         {
             if ($null -ne $Script:exportedInstances -and $Script:ExportMode)
             {
-                    Write-Verbose -Message "Getting Role Eligibility by PrincipalId and RoleDefinitionId"
+                    Write-Verbose -Message "Getting Group Eligibility by PrincipalId and RoleDefinitionId"
                     if ($PrincipalType -eq 'User')
                     {
                         $PrincipalIdValue = Get-MgUser -Filter "UserPrincipalName eq '$Principal'" -ErrorAction SilentlyContinue
@@ -145,12 +138,11 @@
                         return $nullResult
                     }
                     Write-Verbose -Message "Found Principal {$PrincipalId}"
-                    $RoleDefinitionId = (Get-MgBetaRoleManagementDirectoryRoleDefinition -Filter "DisplayName eq '$RoleDefinition'").Id
-                    $request = $Script:exportedInstances | Where-Object -FilterScript {$_.PrincipalId -eq $PrincipalId -and $_.RoleDefinitionId -eq $RoleDefinition}
+                    $request = $Script:exportedInstances | Where-Object -FilterScript {$_.PrincipalId -eq $PrincipalId}
             }
             else
             {
-                Write-Verbose -Message "Getting Role Eligibility by PrincipalId and RoleDefinitionId"
+                Write-Verbose -Message "Getting Group Eligibility by PrincipalId and RoleDefinitionId"
                 if ($PrincipalType -eq 'User')
                 {
                     Write-Verbose -Message "Retrieving principal {$Principal} of type {$PrincipalType}"
@@ -174,10 +166,9 @@
                     return $nullResult
                 }
                 Write-Verbose -Message "Found Principal {$PrincipalId}"
-                $RoleDefinitionId = (Get-MgBetaRoleManagementDirectoryRoleDefinition -Filter "DisplayName eq '$RoleDefinition'").Id
-                Write-Verbose -Message "Found Role {$RoleDefinitionId}"
 
-                $request = Get-MgBetaRoleManagementDirectoryRoleEligibilityScheduleRequest -Filter "PrincipalId eq '$PrincipalId' and RoleDefinitionId eq '$RoleDefinitionId'"
+                $request = Get-MgIdentityGovernancePrivilegedAccessGroupEligibilityScheduleRequest `
+                    -Filter "PrincipalId eq '$PrincipalId'"
             }
         }
         if ($null -eq $request)
@@ -185,7 +176,7 @@
             return $nullResult
         }
 
-        Write-Verbose -Message "Found existing AADGroupEligibilityScheduleRequest"
+        Write-Verbose -Message "Found existing AADGroupELigibilityScheduleRequest"
         if ($PrincipalType -eq 'User')
         {
             $PrincipalInstance = Get-MgUser -UserId $request.PrincipalId -ErrorAction SilentlyContinue
@@ -201,7 +192,6 @@
         {
             return $nullResult
         }
-        $RoleDefinitionValue = Get-MgBetaRoleManagementDirectoryRoleDefinition -UnifiedRoleDefinitionId $request.RoleDefinitionId
 
         $ScheduleInfoValue = @{}
 
@@ -266,13 +256,10 @@
         $results = @{
             Principal             = $PrincipalValue
             PrincipalType         = $PrincipalTypeValue
-            RoleDefinition        = $RoleDefinitionValue.DisplayName
-            DirectoryScopeId      = $request.DirectoryScopeId
-            AppScopeId            = $request.AppScopeId
             Action                = $request.Action
+            AccessId              = $request.AccessId
             Id                    = $request.Id
             Justification         = $request.Justification
-            IsValidationOnly      = $request.IsValidationOnly
             ScheduleInfo          = $ScheduleInfoValue
             TicketInfo            = $ticketInfoValue
             Ensure                = 'Present'
@@ -754,7 +741,6 @@ function Export-TargetResource
             $params = @{
                 Id                    = $request.Id
                 Principal             = $request.PrincipalId
-                RoleDefinition        = 'TempDefinition'
                 ScheduleInfo          = 'TempSchedule'
                 Ensure                = 'Present'
                 Credential            = $Credential
