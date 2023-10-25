@@ -1,0 +1,34 @@
+{
+    "resourceName": "AADB2XIdentityUserFlow",
+    "description": "Represents a self-service sign-up user flow within a Microsoft Entra tenant.",
+    "roles": {
+        "read": [
+            "Security Reader"
+        ],
+        "update": [
+            "Authentication Policy Administrator"
+        ]
+    },
+    "permissions": {
+        "graph": {
+            "delegated": {
+                "read": [
+                ],
+                "update": [
+                ]
+            },
+            "application": {
+                "read": [
+                    {
+                        "name": "IdentityUserFlow.Read.All"
+                    }
+                ],
+                "update": [
+                    {
+                        "name": "IdentityUserFlow.ReadWrite.All"
+                    }
+                ]
+            }
+        }
+    }
+}
