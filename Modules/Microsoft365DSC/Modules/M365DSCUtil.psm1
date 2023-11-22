@@ -3,6 +3,8 @@
 $Global:SessionSecurityCompliance = $null
 #endregion
 
+$Script:M365DSCDependenciesValidated = $false
+
 #region Extraction Modes
 $Global:DefaultComponents = @('SPOApp', 'SPOSiteDesign')
 
@@ -895,6 +897,17 @@ function Test-M365DSCParameterState
     }
     if ($returnValue -eq $false -or $DriftedParameters.Keys.Length -gt 0)
     {
+        if (-not $Script:M365DSCDetectedDrifts)
+        {
+            $Script:M365DSCDetectedDrifts = @()
+        }
+        $PrimaryKeyName = Get-M365DSCPrimaryKeyFromResource -ResourceName $Source
+        $currentDriftObject = @{
+            ResourceName     = $Source
+            PrimaryKeyName   = $PrimaryKeyName
+            PrimaryKeyValue  = $DesiredValues.$PrimaryKeyName
+            Drifts           = @()
+        }
         $EventMessage = [System.Text.StringBuilder]::New()
         $EventMessage.Append("<M365DSCEvent>`r`n") | Out-Null
         $EventMessage.Append("    <ConfigurationDrift Source=`"$Source`">`r`n") | Out-Null
@@ -902,6 +915,12 @@ function Test-M365DSCParameterState
         $EventMessage.Append("        <ParametersNotInDesiredState>`r`n") | Out-Null
         foreach ($key in $DriftedParameters.Keys)
         {
+            $driftedData = @{
+                ParameterName = $key
+                DesiredValue  = $DesiredValues[$key]
+                CurrentValue  = $CurrentValues[$key]
+            }
+            $currentDriftObject.Drifts += $driftedData
             Write-Verbose -Message "Detected Drifted Parameter [$Source]$key"
 
             #region Telemetry
@@ -922,6 +941,48 @@ function Test-M365DSCParameterState
             Add-M365DSCTelemetryEvent -Type 'DriftInfo' -Data $driftedData
             #endregion
             $EventMessage.Append("            <Param Name=`"$key`">" + $DriftedParameters.$key + "</Param>`r`n") | Out-Null
+        }
+
+        # If the DDF File Path is set then generate store the content.
+        $DDFFilePath = $null
+        try
+        {
+            $DDFFilePath = Get-M365DSCDDFFilePath
+        }
+        catch
+        {
+            Write-Verbose -Message "Could not retrieve DDF Path."
+        }
+
+        if ($DDFFilePath)
+        {
+            try
+            {
+                Write-Verbose -Message "Appending information to the Detected Drift File (DDF)."
+
+                # If file already exists, read its content and append.
+                $driftFileContentAsPosH = @()
+                if (Test-Path $DDFFilePath)
+                {
+                    Write-Verbose -Message "DDF already exists at {$DDFFilePath}"
+                    $driftFileContentAsPosH = ConvertFrom-Json -Depth 50 -InputObject (Get-Content $DDFFilePath -Raw)
+                }
+                else
+                {
+                    Write-Verbose -Message "Generating new DDF at {$DDFFilePath}"
+                }
+
+                $driftFileContentAsPosH += $currentDriftObject
+                $driftContentAsText = (ConvertTo-Json -InputObject $driftFileContentAsPosH -Depth 50).ToString()
+                Write-Verbose -Message "Appending $driftContentAsText"
+                $driftContentAsText | Out-File -FilePath $DDFFilePath
+            }
+            catch
+            {
+                New-M365DSCLogEntry -Message 'Error generating drift content file.' `
+                    -Exception $_ `
+                    -Source $($MyInvocation.MyCommand.Source)
+            }
         }
 
         #region Telemetry
@@ -1358,7 +1419,25 @@ function Export-M365DSCConfiguration
     $Global:M365DSCExportedResourceInstancesNames = $null
 }
 
-$Script:M365DSCDependenciesValidated = $false
+<#
+.Description
+This function returns the content of the the DDF if it exists.
+
+.Functionality
+Public
+#>
+function Get-M365DSCDDFContentAsJSON
+{
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
+    param()
+
+    $DDFFilePath = Get-M365DSCDDFFilePath
+    $content = Get-Content -Path $DDFFilePath -Raw
+    $jsonRepresentation = ConvertTo-Json -InputObject $content -Depth 50
+    return $jsonRepresentation
+}
+
 
 <#
 .Description
@@ -3208,6 +3287,65 @@ function Update-M365DSCExportAuthenticationResults
 
 <#
 .Description
+This function determines the Primary Key of a given Resource
+
+.Functionality
+Internal
+#>
+function Get-M365DSCPrimaryKeyFromResource
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ResourceName
+    )
+
+    if (-not $ResourceName.StartsWith('MSFT_'))
+    {
+        $ResourceName = "MSFT_" + $ResourceName
+    }
+    $dscResource = Get-DSCResource -Module 'Microsoft365DSC' -Name $ResourceName
+    $mandatoryProperties = $dscResource.Properties | Where-Object -FilterScript {$_.IsMandatory}
+    $primaryKey = ''
+    if ($mandatoryProperties.Name.Contains('IsSingleInstance'))
+    {
+        $primaryKey = 'IsSingleInstance'
+    }
+    elseif ($mandatoryProperties.Name.Contains('DisplayName'))
+    {
+        $primaryKey = 'DisplayName'
+    }
+    elseif ($mandatoryProperties.Name.Contains('Identity'))
+    {
+        $primaryKey = 'Identity'
+    }
+    elseif ($mandatoryProperties.Name.Contains('Id'))
+    {
+        $primaryKey = 'Id'
+    }
+    elseif ($mandatoryProperties.Name.Contains('Name'))
+    {
+        $primaryKey = 'Name'
+    }
+    elseif ($mandatoryProperties.Name.Contains('Title'))
+    {
+        $primaryKey = 'Title'
+    }
+    elseif ($mandatoryProperties.Name.Contains('CdnType'))
+    {
+        $primaryKey = 'CdnType'
+    }
+    elseif ($mandatoryProperties.Name.Contains('Usage'))
+    {
+        $primaryKey = 'Usage'
+    }
+    return $primaryKey
+}
+
+<#
+.Description
 This function generates DSC string from an exported result hashtable
 
 .Functionality
@@ -3256,39 +3394,8 @@ function Get-M365DSCExportContentForResource
     $Results = Format-M365DSCString -Properties $Results `
         -ResourceName $ResourceName
 
-    $primaryKey = ''
-    if ($Results.ContainsKey('IsSingleInstance'))
-    {
-        $primaryKey = ''
-    }
-    elseif ($Results.ContainsKey('DisplayName'))
-    {
-        $primaryKey = $Results.DisplayName
-    }
-    elseif ($Results.ContainsKey('Identity'))
-    {
-        $primaryKey = $Results.Identity
-    }
-    elseif ($Results.ContainsKey('Id'))
-    {
-        $primaryKey = $Results.Id
-    }
-    elseif ($Results.ContainsKey('Name'))
-    {
-        $primaryKey = $Results.Name
-    }
-    elseif ($Results.ContainsKey('Title'))
-    {
-        $primaryKey = $Results.Title
-    }
-    elseif ($Results.ContainsKey('CdnType'))
-    {
-        $primaryKey = $Results.CdnType
-    }
-    elseif ($Results.ContainsKey('Usage'))
-    {
-        $primaryKey = $Results.Usage
-    }
+    $primaryKeyName = Get-M365DSCPrimaryKeyFromResource -ResourceName $ResourceName
+    $primaryKey = $Results.$primaryKeyName
 
     $instanceName = $ResourceName
     if (-not [System.String]::IsNullOrEmpty($primaryKey))
@@ -4334,6 +4441,7 @@ Export-ModuleMember -Function @(
     'Get-M365DSCComponentsForAuthenticationType',
     'Get-M365DSCComponentsWithMostSecureAuthenticationType',
     'Get-M365DSCConfigurationConflict',
+    'Get-M365DSCDDFContentAsJSON',
     'Get-M365DSCExportContentForResource',
     'Get-M365DSCOrganization',
     'Get-M365DSCTenantDomain',

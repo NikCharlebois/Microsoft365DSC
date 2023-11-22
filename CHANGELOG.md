@@ -1,5 +1,10 @@
 # Change log for Microsoft365DSC
 
+# UNRELEASED
+
+* MISC
+  * Updated the DSCPArser dependency to version 1.4.0.0.
+
 # 1.23.1115.1
 
 * AADApplication

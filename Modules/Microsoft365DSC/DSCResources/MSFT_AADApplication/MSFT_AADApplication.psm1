@@ -767,7 +767,7 @@ function Test-TargetResource
 
     $CurrentValues = Get-TargetResource @PSBoundParameters
 
-    if ($CurrentValues.Permissions.Length -gt 0 -and $null -ne $CurrentValues.Permissions.Name)
+    if ($Permissions -and $CurrentValues.Permissions.Length -gt 0 -and $null -ne $CurrentValues.Permissions.Name)
     {
         $permissionsDiff = Compare-Object -ReferenceObject ($CurrentValues.Permissions.Name) -DifferenceObject ($Permissions.Name)
         $driftedParams = @{}

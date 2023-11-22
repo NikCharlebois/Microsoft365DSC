@@ -418,6 +418,7 @@ function Export-TargetResource
             {
                 $Results = Update-M365DSCExportAuthenticationResults -ConnectionMode $ConnectionMode `
                     -Results $Results
+                $Results.Rule = $Result.Rule.Replace('"', '`"')
                 $currentDSCBlock = Get-M365DSCExportContentForResource -ResourceName $ResourceName `
                     -ConnectionMode $ConnectionMode `
                     -ModulePath $PSScriptRoot `

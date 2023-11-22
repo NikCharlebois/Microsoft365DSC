@@ -26,6 +26,14 @@ Configuration Example
             PublicClient              = $false
             ReplyURLs                 = "https://app.contoso.com"
             Permissions               = @(
+
+            MSFT_AADApplicationPermission
+            {
+                Name                = 'SuperScope'
+                Type                = 'Delegated'
+                SourceAPI           = 'Microsoft Graph'
+                AdminConsentGranted = $false
+            }
                 MSFT_AADApplicationPermission
                 {
                     Name                = 'User.Read'

@@ -476,6 +476,44 @@ function New-M365DSCNotificationEndPointRegistration
 
 <#
 .Description
+This method sets the path for the Drift DetectionFile (DDF) in the registry.
+
+.Parameter DDFFilePath
+Represents the path where the DDF File should be stored
+#>
+function Set-M365DSCDDFFilePath
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $DDFFilePath
+    )
+
+    [System.Environment]::SetEnvironmentVariable('M365DSCDDFFilePath', $DDFFilePath, `
+            [System.EnvironmentVariableTarget]::Machine)
+}
+
+<#
+.Description
+This method sets the path for the Drift DetectionFile (DDF) in the registry.
+
+.Parameter DDFFilePath
+Represents the path where the DDF File should be stored
+#>
+function Get-M365DSCDDFFilePath
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    param()
+
+    $DDFFilePath = ([System.Environment]::GetEnvironmentVariable('M365DSCDDFFilePath', `
+                [System.EnvironmentVariableTarget]::Machine))
+    return $DDFFilePath
+}
+
+<#
+.Description
 This function attempts to remove a new notification endpoint in registry.
 
 .Parameter Url
@@ -731,10 +769,12 @@ Export-ModuleMember -Function @(
     'Add-M365DSCEvent',
     'Assert-M365DSCIsNonInteractiveShell',
     'Export-M365DSCDiagnosticData',
+    'Get-M365DSCDDFFilePath',
     'Get-M365DSCLoggingOption',
     'New-M365DSCLogEntry',
     'Get-M365DSCNotificationEndPointRegistration',
     'New-M365DSCNotificationEndPointRegistration',
     'Remove-M365DSCNotificationEndPointRegistration',
+    'Set-M365DSCDDFFilePath',
     'Set-M365DSCLoggingOption'
 )
