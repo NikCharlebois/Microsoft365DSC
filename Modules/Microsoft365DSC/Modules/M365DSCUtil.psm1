@@ -903,7 +903,7 @@ function Test-M365DSCParameterState
         }
         $PrimaryKeyName = Get-M365DSCPrimaryKeyFromResource -ResourceName $Source
         $currentDriftObject = @{
-            ResourceName     = $Source
+            ResourceName     = $Source.Replace('MSFT_', '')
             PrimaryKeyName   = $PrimaryKeyName
             PrimaryKeyValue  = $DesiredValues.$PrimaryKeyName
             Drifts           = @()
@@ -965,7 +965,8 @@ function Test-M365DSCParameterState
                 if (Test-Path $DDFFilePath)
                 {
                     Write-Verbose -Message "DDF already exists at {$DDFFilePath}"
-                    $driftFileContentAsPosH = ConvertFrom-Json -Depth 50 -InputObject (Get-Content $DDFFilePath -Raw)
+                    $DDFFileContentAsText = Get-Content $DDFFilePath -Raw
+                    $driftFileContentAsPosH = ConvertFrom-Json -InputObject $DDFFileContentAsText
                 }
                 else
                 {
