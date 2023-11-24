@@ -1422,23 +1422,88 @@ function Export-M365DSCConfiguration
 
 <#
 .Description
-This function returns the content of the the DDF if it exists.
+This generates a Rollback Artifact that represents the configuration items that need
+to be applied to a tenant to undo the change that are about to be applied by a specific
+configuration file.
+
+.Parameter ConfigurationPath
+Path to the configuration file we wish to generate the RollBack Artifact from.
+
+.Parameter MOFPath
+Path to MOF file that represents the compiled version of the provided Configuration file.
+This is used to assess what changes the given configuration is about to apply to the tenant.
+
+.Parameter DDFPath
+Path that specifies where to store the Detected Drifts File (DDF).
 
 .Functionality
 Public
 #>
-function Get-M365DSCDDFContentAsJSON
+function Get-M365DSCRollbackArtifact
 {
     [CmdletBinding()]
-    [OutputType([System.Collections.Hashtable])]
-    param()
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $ConfigurationPath,
 
-    $DDFFilePath = Get-M365DSCDDFFilePath
-    $content = Get-Content -Path $DDFFilePath -Raw
-    $jsonRepresentation = ConvertTo-Json -InputObject $content -Depth 50
-    return $jsonRepresentation
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $MOFPath,
+
+        [Parameter()]
+        [System.String]
+        $DDFPath
+    )
+
+    # Set the DDF File Path to a Global variable. This file will be populated by the Test-DSCCOnfiguration call.
+    if ([System.String]::IsNullOrEmpty($DDFFilePath))
+    {
+        $Global:M365DSCDDFFilePath = Get-M365DSCDDFFilePath
+    }
+    else
+    {
+        Set-M365DSCDDFFilePath -DDFFilePath $DDFPath
+        $Global:M365DSCDDFFilePath = $DDFPath
+    }
+
+    # Delete the DDF object if it already exists
+    if (Test-Path -Path $Global:M365DSCDDFFilePath)
+    {
+        Write-Verbose -Message 'The DDF object already exists, removing it.'
+        Remove-Item -Path $Global:M365DSCDDFFilePath -Force
+    }
+
+    # Test the current state of the tenant against the compiled configuration to detect the effective changes
+    # we are about to push.
+    Test-DSCConfiguration -ReferenceConfiguration $MOFPath | Out-Null
+
+    # Load information about the DDF as a JSON object.
+    $DDFContent = Get-Content -Path $Global:M365DSCDDFFilePath -Raw
+    $DDF = ConvertFrom-Json -InputObject $DDFContent
+
+    # Parse the configuration file into an object.
+    $configObjects = ConvertTo-DSCObject -Path $ConfigurationPath
+
+    $RBAs = @()
+    foreach($resourceInDrift in $DDF)
+    {
+        $resourceInstanceName = $resourceInDrift.ResourceName + "-" + $resourceInDrift.PrimaryKeyValue
+        $configInstance = $configObjects | Where-Object -FilterScript {$_.ResourceInstanceName -eq $resourceInstanceName}
+
+        if ($configInstance)
+        {
+            Write-Verbose -Message "Found instance of resource {$resourceInstanceName}."
+            foreach ($drift in $resourceInDrift.Drifts)
+            {
+                $configInstance.($drift.ParameterName) = $drift.CurrentValue
+            }
+            $RBAs += $configInstance
+        }
+    }
+    $RBAContentAsText = ConvertFrom-DSCObject -DSCResources $RBAs
+    return $RBAContentAsText
 }
-
 
 <#
 .Description
@@ -4442,9 +4507,9 @@ Export-ModuleMember -Function @(
     'Get-M365DSCComponentsForAuthenticationType',
     'Get-M365DSCComponentsWithMostSecureAuthenticationType',
     'Get-M365DSCConfigurationConflict',
-    'Get-M365DSCDDFContentAsJSON',
     'Get-M365DSCExportContentForResource',
     'Get-M365DSCOrganization',
+    'Get-M365DSCRollbackArtifact',
     'Get-M365DSCTenantDomain',
     'Get-M365DSCWorkloadsListFromResourceNames',
     'Get-M365TenantName',
