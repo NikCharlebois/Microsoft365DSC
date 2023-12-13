@@ -997,6 +997,12 @@ function Get-M365DSCIntuneDeviceCompliancePolicyWindows10AdditionalProperties
         if ($property -ne 'Verbose')
         {
             $propertyName = $property[0].ToString().ToLower() + $property.Substring(1, $property.Length - 1)
+
+            # Exception for the TPMRequired property where the TPM all needs to be lowered.
+            if ($propertyName -eq 'tPMRequired')
+            {
+                $propertyName = 'tpmRequired'
+            }
             $propertyValue = $properties.$property
             $results.Add($propertyName, $propertyValue)
         }

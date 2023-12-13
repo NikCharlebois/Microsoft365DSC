@@ -176,7 +176,7 @@ function Get-TargetResource
     try
     {
         #Retrieve policy general settings
-        $policy = Get-MgBetaDeviceManagementConfigurationPolicy -DeviceManagementConfigurationPolicyId $Identity -ErrorAction Stop
+        $policy = Get-MgBetaDeviceManagementConfigurationPolicy -DeviceManagementConfigurationPolicyId $Identity -ErrorAction SilentlyContinue
 
         if ($null -eq $policy)
         {
@@ -475,10 +475,13 @@ function Set-TargetResource
         }
         New-MgBetaDeviceManagementConfigurationPolicy -bodyParameter $createParameters
 
-        $assignmentsHash = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $Assignments
-        Update-DeviceConfigurationPolicyAssignment `
-            -DeviceConfigurationPolicyId $Identity `
-            -Targets $assignmentsHash
+        if ($null -ne $Assignments)
+        {
+            $assignmentsHash = Convert-M365DSCDRGComplexTypeToHashtable -ComplexObject $Assignments
+            Update-DeviceConfigurationPolicyAssignment `
+                -DeviceConfigurationPolicyId $Identity `
+                -Targets $assignmentsHash
+        }
 
     }
     elseif ($Ensure -eq 'Present' -and $currentPolicy.Ensure -eq 'Present')
@@ -816,7 +819,7 @@ function Export-TargetResource
         [array]$policies = Get-MgBetaDeviceManagementConfigurationPolicy `
             -All:$true `
             -Filter $Filter `
-            -ErrorAction Stop | Where-Object -FilterScript { $_.TemplateReference.TemplateId -eq $policyTemplateID } `
+            -ErrorAction Stop | Where-Object -FilterScript { $_.TemplateReference.TemplateId -eq $policyTemplateID }
 
         if ($policies.Length -eq 0)
         {
@@ -931,7 +934,6 @@ function Get-IntuneSettingCatalogPolicySetting
     $settingInstances = @()
     foreach ($settingDefinition in $settingDefinitions.SettingInstanceTemplate)
     {
-
         $settingInstance = @{}
         $settingName = $settingDefinition.SettingDefinitionId.split('_') | Select-Object -Last 1
         $settingType = $settingDefinition.AdditionalProperties.'@odata.type'.replace('InstanceTemplate', 'Instance')
@@ -957,7 +959,10 @@ function Get-IntuneSettingCatalogPolicySetting
             -SettingValueName $settingValueName `
             -SettingValueType $settingValueType `
             -SettingValueTemplateId $settingValueTemplateId
-        $settingInstance += ($settingValue)
+        if ($null -ne $settingValue)
+        {
+            $settingInstance += ($settingValue)
+        }
 
         $settingInstances += @{
             '@odata.type'     = '#microsoft.graph.deviceManagementConfigurationSetting'

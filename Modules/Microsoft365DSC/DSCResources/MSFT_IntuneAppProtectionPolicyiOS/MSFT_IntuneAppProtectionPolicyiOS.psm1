@@ -725,7 +725,7 @@ function Set-TargetResource
         {
             if (-not [String]::IsNullOrEmpty($createParameters.$duration))
             {
-                $createParameters.$duration = [TimeSpan]::parse($createParameters.$duration)
+                $createParameters.$duration = [System.Xml.XmlConvert]::ToTimeSpan($createParameters.$duration)
             }
         }
         $myExemptedAppProtocols = @()
@@ -767,7 +767,7 @@ function Set-TargetResource
         {
             if (-not [String]::IsNullOrEmpty($updateParameters.$duration))
             {
-                $updateParameters.$duration = [TimeSpan]::parse($updateParameters.$duration)
+                $updateParameters.$duration = [System.Xml.XmlConvert]::ToTimeSpan($updateParameters.$duration)
             }
         }
         $myExemptedAppProtocols = @()

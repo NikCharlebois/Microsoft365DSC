@@ -1,17 +1,8 @@
     param
     (
         [Parameter()]
-        [System.String]
-        $GlobalAdminUser,
-
-        [Parameter()]
-        [System.String]
-        $GlobalAdminPassword,
-
-        [Parameter()]
-        [System.String]
-        [ValidateSet('Public', 'GCC', 'GCCH', 'Germany', 'China')]
-        $Environment = 'Public'
+        [System.Management.Automation.PSCredential]
+        $Credential
     )
 
     Configuration Master
@@ -20,12 +11,7 @@
         (
             [Parameter(Mandatory = $true)]
             [System.Management.Automation.PSCredential]
-            $Credscredential,
-
-            [Parameter()]
-            [System.String]
-            [ValidateSet('Public', 'GCC', 'GCCH', 'Germany', 'China')]
-            $Environment = 'Public'
+            $Credscredential
         )
 
         Import-DscResource -ModuleName Microsoft365DSC
@@ -74,13 +60,20 @@
                 }
                 IntuneAccountProtectionPolicy 'myAccountProtectionPolicy'
                 {
-                    Identity                                               = '355e88e2-dd1f-4956-bafe-9000d8267ad5'
-                    DisplayName                                            = 'test'
-                    deviceGuardLocalSystemAuthorityCredentialGuardSettings = "notConfigured"
-                    WindowsHelloForBusinessBlocked                         = $true
-                    PinMinimumLength                                       = 5
-                    PinSpecialCharactersUsage                              = 'required'
-                    Ensure                                                 = 'Present'
+                    Assignments                                            = @();
+                    deviceGuardLocalSystemAuthorityCredentialGuardSettings = "enableWithUEFILock";
+                    DisplayName                                            = "TestProtectionPolicy";
+                    enhancedAntiSpoofingForFacialFeaturesEnabled           = $False;
+                    Ensure                                                 = "Present";
+                    pinLowercaseCharactersUsage                            = "notConfigured";
+                    pinRecoveryEnabled                                     = $False;
+                    pinSpecialCharactersUsage                              = "notConfigured";
+                    pinUppercaseCharactersUsage                            = "notConfigured";
+                    securityDeviceRequired                                 = $False;
+                    unlockWithBiometricsEnabled                            = $False;
+                    useCertificatesForOnPremisesAuthEnabled                = $False;
+                    useSecurityKeyForSignin                                = $True;
+                    windowsHelloForBusinessBlocked                         = "notConfigured";
                     Credential                                             = $Credscredential
                 }
                 IntuneAntivirusPolicyWindows10SettingCatalog 'myAVWindows10Policy'
@@ -299,7 +292,7 @@
                 }
                 IntuneDeviceCompliancePolicyAndroidDeviceOwner 'RemoveAndroidDeviceCompliancePolicyOwner'
                 {
-                    DisplayName = 'DeviceOwner'
+                    DisplayName = 'DeviceOwnerPolicy'
                     Ensure      = 'Absent'
                     Credential  = $Credscredential
                 }
@@ -353,7 +346,7 @@
                     ManagedEmailProfileRequired                 = $True
                     Ensure                                      = 'Present'
                     Credential                                  = $Credscredential
-
+        
                 }
                 IntuneDeviceCompliancePolicyiOs 'RemoveDeviceCompliancePolicyiOS'
                 {
@@ -475,7 +468,7 @@
                                         {
                                             Name = 'hosted_app'
                                         }
-
+        
                                         MSFT_IntuneGroupPolicyDefinitionValuePresentationValueKeyValuePair
                                         {
                                             Name = 'user_script'
@@ -509,7 +502,7 @@
                                     Id                          = '14c48993-35af-4b77-a4f8-12de917b1bb9'
                                     odataType                   = '#microsoft.graph.groupPolicyPresentationValueDecimal'
                                 }
-
+        
                                 MSFT_IntuneGroupPolicyDefinitionValuePresentationValue
                                 {
                                     presentationDefinitionId    = '98998e7f-cc2a-4d96-8c47-35dd4b2ce56b'
@@ -518,7 +511,7 @@
                                     Id                          = '4d654df9-6826-470f-af4e-d37491663c76'
                                     odataType                   = '#microsoft.graph.groupPolicyPresentationValueDecimal'
                                 }
-
+        
                                 MSFT_IntuneGroupPolicyDefinitionValuePresentationValue
                                 {
                                     presentationDefinitionId    = '6900e752-4bc3-463b-9fc8-36d78c77bc3e'
@@ -2695,7 +2688,5 @@
     }
 
     # Compile and deploy configuration
-    $password = ConvertTo-SecureString $GlobalAdminPassword -AsPlainText -Force
-    $credential = New-Object System.Management.Automation.PSCredential ($GlobalAdminUser, $password)
-    Master -ConfigurationData $ConfigurationData -credsGlobalAdmin $credential -Environment $Environment
+    Master -ConfigurationData $ConfigurationData -Credscredential $Credential
     Start-DscConfiguration Master -Wait -Force -Verbose

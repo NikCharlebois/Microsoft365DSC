@@ -16,13 +16,20 @@ Configuration Example
     {
         IntuneAccountProtectionPolicy 'myAccountProtectionPolicy'
         {
-            Identity                                               = '355e88e2-dd1f-4956-bafe-9000d8267ad5'
-            DisplayName                                            = 'test'
-            deviceGuardLocalSystemAuthorityCredentialGuardSettings = "notConfigured"
-            WindowsHelloForBusinessBlocked                         = $true
-            PinMinimumLength                                       = 5
-            PinSpecialCharactersUsage                              = 'required'
-            Ensure                                                 = 'Present'
+            Assignments                                            = @();
+            deviceGuardLocalSystemAuthorityCredentialGuardSettings = "enableWithUEFILock";
+            DisplayName                                            = "TestProtectionPolicy";
+            enhancedAntiSpoofingForFacialFeaturesEnabled           = $False;
+            Ensure                                                 = "Present";
+            pinLowercaseCharactersUsage                            = "notConfigured";
+            pinRecoveryEnabled                                     = $False;
+            pinSpecialCharactersUsage                              = "notConfigured";
+            pinUppercaseCharactersUsage                            = "notConfigured";
+            securityDeviceRequired                                 = $False;
+            unlockWithBiometricsEnabled                            = $False;
+            useCertificatesForOnPremisesAuthEnabled                = $False;
+            useSecurityKeyForSignin                                = $True;
+            windowsHelloForBusinessBlocked                         = "notConfigured";
             Credential                                             = $Credscredential
         }
     }

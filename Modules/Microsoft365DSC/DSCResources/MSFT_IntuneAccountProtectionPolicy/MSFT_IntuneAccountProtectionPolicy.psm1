@@ -4,7 +4,7 @@ function Get-TargetResource
     [OutputType([System.Collections.Hashtable])]
     param
     (
-        [Parameter(Mandatory = $true)]
+        [Parameter()]
         [System.String]
         $Identity,
 
@@ -246,7 +246,7 @@ function Set-TargetResource
     [CmdletBinding()]
     param
     (
-        [Parameter(Mandatory = $true)]
+        [Parameter()]
         [System.String]
         $Identity,
 
@@ -436,12 +436,14 @@ function Set-TargetResource
         $updateParameters = @{}
         $updateParameters.add('DisplayName', $DisplayName)
         $updateParameters.add('Description', $Description)
+
         Update-MgBetaDeviceManagementIntent -DeviceManagementIntentId $currentPolicy.Identity -BodyParameter $updateParameters
 
         #Update-MgBetaDeviceManagementIntent does not support updating the property settings
         #Update-MgBetaDeviceManagementIntentSetting only support updating a single setting at a time
         #Using Rest to reduce the number of calls
         $Uri = "https://graph.microsoft.com/beta/deviceManagement/intents/$($currentPolicy.Identity)/updateSettings"
+
         $body = @{'settings' = $settings }
         Invoke-MgGraphRequest -Method POST -Uri $Uri -Body ($body | ConvertTo-Json -Depth 20) -ContentType 'application/json'
 
@@ -470,7 +472,7 @@ function Test-TargetResource
     [OutputType([System.Boolean])]
     param
     (
-        [Parameter(Mandatory = $true)]
+        [Parameter()]
         [System.String]
         $Identity,
 

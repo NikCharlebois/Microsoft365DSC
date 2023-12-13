@@ -198,15 +198,22 @@ function Set-TargetResource
     {
         Write-Verbose -Message "Creating new Intune App Configuration Policy {$DisplayName}"
         $creationParams = @{
-            displayName = $DisplayName
-            description = $Description
+            "@odata.type" = "#microsoft.graph.targetedManagedAppConfiguration"
+            displayName   = $DisplayName
+            description   = $Description
         }
         if ($null -ne $CustomSettings)
         {
             [System.Object[]]$customSettingsValue = ConvertTo-M365DSCIntuneAppConfigurationPolicyCustomSettings -Settings $CustomSettings
             $creationParams.Add('customSettings', $customSettingsValue)
         }
-        $policy = New-MgBetaDeviceAppManagementTargetedManagedAppConfiguration @creationParams
+        else
+        {
+            $creationPArams.Add('customSettings', @())
+        }
+
+        Write-Verbose -Message "CreationParams: $(Convert-M365DscHashtableToString -Hashtable $creationParams)"
+        $policy = New-MgBetaDeviceAppManagementTargetedManagedAppConfiguration -BodyParameter $creationParams
 
         #region Assignments
         $assignmentsHash = @()
