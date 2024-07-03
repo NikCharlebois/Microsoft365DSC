@@ -67,6 +67,10 @@ function Get-TargetResource
         [System.String]
         $GuestUserRole,
 
+        [Parameter()]
+        [System.Boolean]
+        $RestrictNonAdminAccess,
+
         #generic
         [Parameter()]
         [ValidateSet('Present')]
@@ -154,6 +158,7 @@ function Get-TargetResource
     {
         Write-Verbose -Message 'Get-TargetResource: Found existing authorization policy'
 
+        $uxSettings = Get-M365DSCUxSettings
         $result = @{
             IsSingleInstance                                        = 'Yes'
             DisplayName                                             = $Policy.DisplayName
@@ -170,6 +175,7 @@ function Get-TargetResource
             DefaultUserRoleAllowedToCreateTenants                   = $Policy.DefaultUserRolePermissions.AllowedToCreateTenants
             PermissionGrantPolicyIdsAssignedToDefaultUserRole       = $Policy.PermissionGrantPolicyIdsAssignedToDefaultUserRole
             GuestUserRole                                           = Get-GuestUserRoleNameFromId -GuestUserRoleId $Policy.GuestUserRoleId
+            RestrictNonAdminAccess                                  = [Boolean]::Parse($uxSettings.restrictNonAdminAccess)
             Ensure                                                  = 'Present'
             Credential                                              = $Credential
             ApplicationSecret                                       = $ApplicationSecret
@@ -253,6 +259,10 @@ function Set-TargetResource
         [System.String]
         $GuestUserRole,
 
+        [Parameter()]
+        [System.Boolean]
+        $RestrictNonAdminAccess,
+
         #generic
         [Parameter()]
         [ValidateSet('Present')]
@@ -315,6 +325,7 @@ function Set-TargetResource
     $desiredParameters.Remove('Credential') | Out-Null
     $desiredParameters.Remove('ManagedIdentity') | Out-Null
     $desiredParameters.Remove('AccessTokens') | Out-Null
+    $desiredParameters.Remove('RestrictNonAdminAccess') | Out-Null
 
     Write-Verbose -Message 'Set-Targetresource: Authorization Policy Ensure Present'
     $UpdateParameters = @{
@@ -393,7 +404,13 @@ function Set-TargetResource
         Write-Verbose -Message "Set-Targetresource: Failed change policy $DisplayName"
         throw $_
     }
-    Write-Verbose -Message "Set-Targetresource: finished processing Policy $Displayname"
+
+    if ($RestrictNonAdminAccess -ne $currentPolicy.RestrictNonAdminAccess)
+    {
+        Write-Verbose -Message "Updating the UXSettings - RestrictNonAdminAccess property to {$RestrictNonAdminAccess}"
+        Set-M365DSCUxSettings -RestrictNonAdminAccess $RestrictNonAdminAccess
+    }
+    Write-Verbose -Message "Set-Targetresource: finished processing Policy [$Displayname]"
 }
 
 function Test-TargetResource
@@ -462,7 +479,12 @@ function Test-TargetResource
 
         [Parameter()]
         [validateset('User', 'Guest', 'RestrictedGuest')]
-        [System.String]$GuestUserRole,
+        [System.String]
+        $GuestUserRole,
+
+        [Parameter()]
+        [System.Boolean]
+        $RestrictNonAdminAccess,
 
         #generic
         [Parameter()]
@@ -729,6 +751,33 @@ function Get-GuestUserRoleNameFromId
     }
     Write-Verbose "return $rolename"
     return $roleName
+}
+
+function Get-M365DSCUxSettings
+{
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
+    param()
+
+    $uri = "https://" + $Global:MSCloudLoginConnectionProfile.MicrosoftGraph.ResourceUrl + '/beta/admin/entra/uxSetting'
+    $results = Invoke-MgGraphRequest -Method 'GET' -Uri $uri
+    return [System.Collections.Hashtable]$results
+}
+
+function Set-M365DSCUxSettings
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Boolean]
+        $RestrictNonAdminAccess
+    )
+
+    $body = @{
+        restrictNonAdminAccess = $RestrictNonAdminAccess
+    }
+    $uri = "https://" + $Global:MSCloudLoginConnectionProfile.MicrosoftGraph.ResourceUrl + '/beta/admin/entra/uxSetting'
+    $results = Invoke-MgGraphRequest -Method 'PATCH' -Uri $uri -Body $body
 }
 
 Export-ModuleMember -Function *-TargetResource
