@@ -900,8 +900,27 @@ function Test-TargetResource
         }
     }
 
-
     $ValuesToCheck = ([Hashtable]$PSBoundParameters).clone()
+
+    #Compare Cim instances
+    foreach ($key in $PSBoundParameters.Keys)
+    {
+        $source = $PSBoundParameters.$key
+        $target = $CurrentValues.$key
+        if ($null -ne $source -and $source.GetType().Name -like '*CimInstance*')
+        {
+            $testResult = Compare-M365DSCComplexObject `
+                -Source ($source) `
+                -Target ($target)
+
+            if (-not $testResult)
+            {
+                break
+            }
+
+            $ValuesToCheck.Remove($key) | Out-Null
+        }
+    }
 
     Write-Verbose -Message "Current Values: $(Convert-M365DscHashtableToString -Hashtable $CurrentValues)"
     Write-Verbose -Message "Target Values: $(Convert-M365DscHashtableToString -Hashtable $PSBoundParameters)"

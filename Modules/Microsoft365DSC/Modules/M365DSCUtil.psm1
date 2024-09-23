@@ -942,7 +942,7 @@ function Test-M365DSCParameterState
                                     $returnValue = $false
                                 }
                             }
-                            {'Hashtable' -or 'CimInstance'}
+                            'Hashtable'
                             {
                                 Write-Verbose -Message "The current property {$fieldName} is a Hashtable"
                                 $AllDesiredValuesAsArray = @()
