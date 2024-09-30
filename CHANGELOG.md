@@ -90,6 +90,7 @@
   * Added support for property EnableRestrictedAccessControl.
 * DEPENDENCIES
   * Updated DSCParser to version 2.0.0.10.
+  * Updated ExchangeOnlineManagement to version 3.6.0.
   * Updated Microsoft.Graph to version 2.23.0.
   * Added dependencies on Az.Accounts, Az.Resources and Az.SecurityInsights
   * Updated DSCParser to version 2.0.0.9.
