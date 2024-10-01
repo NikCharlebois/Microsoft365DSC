@@ -5,6 +5,10 @@
             RequiredVersion = '3.0.2'
         },
         @{
+            ModuleName      = 'Az.Billing'
+            RequiredVersion = '2.0.4'
+        },
+        @{
             ModuleName      = 'Az.Resources'
             RequiredVersion = '7.2.0'
         },
