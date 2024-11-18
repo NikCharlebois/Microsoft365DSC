@@ -573,53 +573,90 @@ function Get-M365DSCDRGSimpleObjectTypeToString
 function Compare-M365DSCComplexObject
 {
     [CmdletBinding()]
-    [OutputType([System.Boolean])]
+    [OutputType([Array])]
     param(
         [Parameter()]
+        [System.Object]
         $Source,
+
         [Parameter()]
+        [System.Object]
         $Target
     )
+
+    $results = @()
 
     #Comparing full objects
     if ($null -eq $Source -and $null -eq $Target)
     {
-        return $true
+        return $results
     }
 
     $sourceValue = ''
     $targetValue = ''
     if (($null -eq $Source) -xor ($null -eq $Target))
     {
+        $driftInfo = @{
+            Desired = $Target
+            Current = $Source
+        }
         if ($null -eq $Source)
         {
             $sourceValue = 'Source is null'
+            $driftInfo.Add("Message", "Current value is null but desired isn't.")
         }
 
         if ($null -eq $Target)
         {
             $targetValue = 'Target is null'
+            $driftInfo.Add("Message", "Desired value is null but current isn't.")
         }
         Write-Verbose -Message "Configuration drift - Complex object: {$sourceValue$targetValue}"
-        return $false
+        $results += $driftInfo
     }
 
-    if ($Source.GetType().FullName -like '*CimInstance[[\]]' -or $Source.GetType().FullName -like '*Hashtable[[\]]')
+    # If current object is a CIMInstance
+    if ($Target.GetType().FullName -like '*CimInstance*' -or $Target.GetType().FullName -like '*Hashtable[[\]]')
     {
+        $driftInfo = @{
+            Desired = ""
+            Current = $Source | Out-String
+            Message = ""
+        }
         if ($Source.Length -ne $Target.Length)
         {
             Write-Verbose -Message "Configuration drift - The complex array have different number of items: Source {$($Source.Length)} Target {$($Target.Length)}"
-            return $false
+            $driftInfo.Message += "The number of items in the current and desired values differ. Current values length = $($Source.Length) and desired values length = $($Target.Length).`r`n"
         }
-        if ($Source.Length -eq 0)
-        {
-            return $true
-        }
+        $targetObject = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Target
+        $driftInfo.Desired += ($targetObject | Out-String)
 
-        if ($Source[0].CimClass.CimClassName -eq 'MSFT_DeviceManagementConfigurationPolicyAssignments' -or
-            $Source[0].CimClass.CimClassName -eq 'MSFT_DeviceManagementMobileAppAssignment' -or
-            ($Source[0].CimClass.CimClassName -like 'MSFT_Intune*Assignments' -and
-            $Source[0].CimClass.CimClassName -ne 'MSFT_IntuneDeviceRemediationPolicyAssignments'))
+        $delta = Compare-Object -ReferenceObject $Source.Values -DifferenceObject $targetObject.Values
+        
+        $missingFromSource = $delta | Where-Object -FilterScript {$_.SideIndicator -eq '<='}
+        if ($null -ne $missingFromSource)
+        {
+            $driftInfo.Message += "Items in current values that are not in the specified desired state:`r`n"
+            foreach ($drift in $missingFromSource)
+            {
+                $driftInfo.Message += "    " + $drift.InputObject + "`r`n"
+            }
+        }
+        $missingFromTarget = $delta | Where-Object -FilterScript {$_.SideIndicator -eq '=>'}
+        if ($null -ne $missingFromTarget)
+        {
+            $driftInfo.Message += "Items in specified desired values that are not in the current values:`r`n"
+            foreach ($drift in $missingFromTarget)
+            {
+                $driftInfo.Message += "    " + $drift.InputObject + "`r`n"
+            }
+        }
+        $results += $driftInfo
+        
+        if ($Target[0].CimClass.CimClassName -eq 'MSFT_DeviceManagementConfigurationPolicyAssignments' -or
+            $Target[0].CimClass.CimClassName -eq 'MSFT_DeviceManagementMobileAppAssignment' -or
+            ($Target[0].CimClass.CimClassName -like 'MSFT_Intune*Assignments' -and
+            $Target[0].CimClass.CimClassName -ne 'MSFT_IntuneDeviceRemediationPolicyAssignments'))
         {
             $compareResult = Compare-M365DSCIntunePolicyAssignment `
                 -Source @($Source) `
@@ -628,120 +665,93 @@ function Compare-M365DSCComplexObject
             if (-not $compareResult)
             {
                 Write-Verbose -Message "Configuration drift - Intune Policy Assignment: $key Source {$Source} Target {$Target}"
-                return $false
-            }
-
-            return $true
-        }
-
-        foreach ($item in $Source)
-        {
-            foreach ($targetItem in $Target)
-            {
-                $compareResult = Compare-M365DSCComplexObject `
-                    -Source $item `
-                    -Target $targetItem
-
-                if ($compareResult)
-                {
-                    break
+                $driftInfo = @{
+                    Desired = $Target
+                    Current = $Source
+                    Message = "Intune assignments differ between current and desired values."
                 }
+                $results += @($driftInfo)
+                return $results
             }
 
-            if (-not $compareResult)
-            {
-                Write-Verbose -Message 'Configuration drift - The complex array items are not identical'
-                return $false
-            }
-        }
-
-        return $true
-    }
-
-    if ($Source.GetType().FullName -like "*CimInstance")
-    {
-        $keys = @()
-        $Source.CimInstanceProperties | Foreach-Object {
-            if ($_.Name -notin @('PSComputerName', 'CimClass', 'CimInstanceProperties', 'CimSystemProperties') `
-                -and $_.IsValueModified)
-            {
-                $keys += $_.Name
-            }
-        }
-    }
+            return @()
+        }        
+    } 
     else
     {
-        $keys = $Source.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
+        $keys = $Target.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
     }
 
-    if ($Target.GetType().FullName -like "*CimInstance")
+    if ($Source.GetType().FullName -like "*Hashtable")
     {
-        $targetKeys = @()
-        $Target.CimInstanceProperties | Foreach-Object {
-            if ($_.Name -notin @('PSComputerName', 'CimClass', 'CimInstanceProperties', 'CimSystemProperties') `
-                -and $_.IsValueModified)
-            {
-                $targetKeys += $_.Name
-            }
-        }
-    }
-    elseif ($Target.GetType().FullName -like "*Hashtable")
-    {
-        $targetKeys = $Target.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
+        $sourceKeys = $Target.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
     }
     else # Most likely a Microsoft Graph Model
     {
-        $Target = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Target
-        $targetKeys = $Target.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
+        $Source = Get-M365DSCDRGComplexTypeToHashtable -ComplexObject $Source
+        $sourceKeys = $Source.Keys | Where-Object -FilterScript { $_ -ne 'PSComputerName' }
     }
 
     foreach ($key in $keys)
     {
         #Matching possible key names between Source and Target
-        $sourceValue = $Source.$key
+        $targetValue = $Target.$key
 
         # Some classes might contain default properties that have the same name as the key,
         # so we need to check if the key is present in the target object --> Hashtable <-> IsReadOnly property
-        if ($key -in $targetKeys)
+        if ($key -in $sourceKeys)
         {
-            $targetValue = $Target.$key
+            $sourceValue = $Source.$key
         }
         else
         {
-            $targetValue = $null
+            $sourceValue = $null
         }
 
         #One of the item is null and not the other
-        if (($Source.$key.Length -eq 0) -xor ($targetValue.Length -eq 0))
+        if (($Target.$key.Length -eq 0) -xor ($sourceValue.Length -eq 0))
         {
+            $driftInfo = @{
+                Desired = $Target.$key
+                Current = $Source.$key
+            }
             if ($null -eq $Source.$key)
             {
                 $sourceValue = 'null'
+                $driftInfo.Add("Message", "Current value is null but desired isn't.")
             }
 
             if ($null -eq $targetValue)
             {
                 $targetValue = 'null'
+                $driftInfo.Add("Message", "Desired value is null but current isn't.")
             }
 
             Write-Verbose -Message "Configuration drift - key: $key Source {$sourceValue} Target {$targetValue}"
-            return $false
+            $results = @($driftInfo)
+            return $results
         }
 
         #Both keys aren't null or empty
         if (($null -ne $Source.$key) -and ($null -ne $Target.$key))
         {
-            if ($Source.$key.GetType().FullName -like '*CimInstance*' -or $Source.$key.GetType().FullName -like '*hashtable*')
+            if ($Target.$key.GetType().FullName -like '*CimInstance*' -or $Target.$key.GetType().FullName -like '*hashtable*')
             {
-                if ($Source.$key.GetType().FullName -like '*CimInstance' -and (
-                        $Source.$key.CimClass.CimClassName -eq 'MSFT_DeviceManagementConfigurationPolicyAssignments' -or
-                        $Source.$key.CimClass.CimClassName -like 'MSFT_DeviceManagementMobileAppAssignment' -or
-                        $Source.$key.CimClass.CimClassName -like 'MSFT_Intune*Assignments'
+                if ($Target.$key.GetType().FullName -like '*CimInstance' -and (
+                        $Target.$key.CimClass.CimClassName -eq 'MSFT_DeviceManagementConfigurationPolicyAssignments' -or
+                        $Target.$key.CimClass.CimClassName -like 'MSFT_DeviceManagementMobileAppAssignment' -or
+                        $Target.$key.CimClass.CimClassName -like 'MSFT_Intune*Assignments'
                     ))
                 {
                     $compareResult = Compare-M365DSCIntunePolicyAssignment `
                         -Source @($Source.$key) `
                         -Target @($Target.$key)
+
+                    $driftInfo = @{
+                        Desired = $Target.$key
+                        Current = $Source.$key
+                        Message = "Intune assignments differ between the current and the desired values."
+                    }
                 }
                 else
                 {
@@ -751,27 +761,27 @@ function Compare-M365DSCComplexObject
                         -Target $Target.$key
                 }
 
-                if (-not $compareResult)
+                if ($compareResult.Length =gt 0)
                 {
                     Write-Verbose -Message "Configuration drift - complex object key: $key Source {$sourceValue} Target {$targetValue}"
-                    return $false
+                    return $compareResult
                 }
             }
             else
             {
                 #Simple object comparison
-                $referenceObject = $Target.$key
-                $differenceObject = $Source.$key
+                $referenceObject = $Source.$key
+                $differenceObject = $Target.$key
 
                 #Identifying date from the current values
-                $targetType = ($Target.$key.GetType()).Name
-                if ($targetType -like '*Date*')
+                $sourceType = ($Source.$key.GetType()).Name
+                if ($sourceType -like '*Date*')
                 {
                     $compareResult = $true
-                    $sourceDate = [DateTime]$Source.$key
-                    if ($sourceDate -ne $targetType)
+                    $targetDate = [DateTime]$Target.$key
+                    if ($targetDate -ne $sourceType)
                     {
-                        $compareResult = $null
+                        $compareResult = @()
                     }
                 }
                 else
@@ -781,15 +791,15 @@ function Compare-M365DSCComplexObject
                         -DifferenceObject ($differenceObject)
                 }
 
-                if ($null -ne $compareResult)
+                if ($compareResult.Length -gt 0)
                 {
                     Write-Verbose -Message "Configuration drift - simple object key: $key Source {$sourceValue} Target {$targetValue}"
-                    return $false
+                    return $compareResult
                 }
             }
         }
     }
-    return $true
+    return $results
 }
 
 function Convert-M365DSCDRGComplexTypeToHashtable

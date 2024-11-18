@@ -613,7 +613,7 @@ function Test-M365DSCParameterState
         $DesiredValues,
 
         [Parameter(Position = 3)]
-        [Array]
+        [System.Collections.ArrayList]
         $ValuesToCheck,
 
         [Parameter(Position = 4)]
@@ -694,6 +694,36 @@ function Test-M365DSCParameterState
                 -and ($_ -ne 'TenantId') -and ($_ -ne 'ApplicationSecret') `
                 -and ($_ -ne 'ManagedIdentity') -and ($_ -ne 'AccessTokens'))
         {
+            # Compare CIMInstances
+            $sourceEntry = $CurrentValues.$_
+            $targetEntry = $DesiredValues.$_
+            if ($targetEntry.getType().Name -like '*CimInstance*')
+            {
+                $testResult = Compare-M365DSCComplexObject `
+                    -Source ($sourceEntry) `
+                    -Target ($targetEntry)
+
+                if ($testResult.Length -gt 0)
+                {
+                    $returnValue = $false
+                    foreach ($drift in $testResult)
+                    {
+                        $EventValue = "<CurrentValue>$($drift.Current)</CurrentValue>"
+                        $EventValue += "<DesiredValue>$($drift.Desired)</DesiredValue>"
+                        $EventValue += "<Message>$($drift.Message)</Message>"
+                        $DriftObject.DriftInfo.Add($_, @{
+                            PropertyName = $_
+                            CurrentValue = $drift.Current
+                            DesiredValue = $drift.Desired
+                            Message      = $drift.Message
+                        })
+                        $DriftedParameters.Add($_, $EventValue)
+                    }
+                }
+
+                $ValuesToCheck.Remove($key) | Out-Null
+            }
+
             if (($CurrentValues.ContainsKey($_) -eq $false) `
                     -or ($CurrentValues.$_ -ne $DesiredValues.$_) `
                     -or (($DesiredValues.ContainsKey($_) -eq $true) -and ($null -ne $DesiredValues.$_ -and $DesiredValues.$_.GetType().IsArray)))
