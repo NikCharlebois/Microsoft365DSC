@@ -447,13 +447,35 @@ function Compare-PSCustomObjectArrays
         [System.Object[]]
         $CurrentValues
     )
+    $VerbosePreference = 'Continue'
+    Write-Verbose -Message "Entering Compare-PSCustomObjectArrays method"
     $DriftedProperties = @()
+
+    $source = ($CurrentValues | ConvertTo-Json -Depth 5)
+    $destination = ($DesiredValues | ConvertTo-Json -Depth 5)
+    Write-Verbose -Message "Source JSON:`r`n$source"
+    Write-Verbose -Message "Destination JSON:`r`n$destination"
+
+    $compareResult = Compare-Object -ReferenceObject  -DifferenceObject ($DesiredValues | ConvertTo-Json -Depth 5)
+    Write-Verbose -Message "Compare Results === `r`nSide Indicator: $($compareResult)"
+
     foreach ($DesiredEntry in $DesiredValues)
     {
+        Write-Verbose -Message "Evaluating DesiredEntry {$DesiredEntry}"
         $Properties = $DesiredEntry.PSObject.Properties
         $KeyProperty = $Properties.Name[0]
 
-        $EquivalentEntryInCurrent = $CurrentValues | Where-Object -FilterScript { $_.$KeyProperty -eq $DesiredEntry.$KeyProperty }
+        Write-Verbose -Message "Checking for an entry in the Current Values with key {$($keyProperty)} set to {$($DesiredEntry.$KeyProperty)}"
+        $DesiredEntryType = $DesiredEntry.$KeyProperty.GetType().Name
+        if ($DesiredEntryType -eq 'Object[]' -or $DesiredEntryType -eq 'Object')
+        {
+            $EquivalentEntryInCurrent = $CurrentValues.$KeyProperty
+        }
+        else
+        {
+            $EquivalentEntryInCurrent = $CurrentValues | Where-Object -FilterScript { $_.$KeyProperty -eq $DesiredEntry.$KeyProperty }
+        }
+
         if ($null -eq $EquivalentEntryInCurrent)
         {
             $result = @{
@@ -462,6 +484,8 @@ function Compare-PSCustomObjectArrays
                 Desired      = $DesiredEntry.$KeyProperty
                 Current      = $null
             }
+            Write-Verbose -Message "[DRIFT]`r`nThe entry is NOT null in the Desired Value, but IS NULL in the current values:`r`n$($result | Out-String)"
+
             $DriftedProperties += $result
         }
         else
@@ -469,6 +493,7 @@ function Compare-PSCustomObjectArrays
             foreach ($property in $Properties)
             {
                 $propertyName = $property.Name
+                Write-Verbose -Message "Evaluating property with name {$propertyName}"
 
                 if ((-not [System.String]::IsNullOrEmpty($DesiredEntry.$PropertyName) -and -not [System.String]::IsNullOrEmpty($EquivalentEntryInCurrent.$PropertyName)) -and `
                     $DesiredEntry.$PropertyName -ne $EquivalentEntryInCurrent.$PropertyName)
@@ -590,6 +615,81 @@ function Get-M365DSCTenantNameFromParameterSet
         }
     }
 }
+<#
+.Description
+This function flattens parameters (which can include ciminstances) into a hashtable.
+
+.Functionality
+Internal
+#>
+function ConvertTo-M365DSCFlatParameterHashtable
+{
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Object]
+        $InputParameters
+    )
+    $VerbosePreference = 'SilentlyContinue'
+    $result = @{}
+    try
+    {
+        $keys = $InputParameters.Keys
+        if ($null -eq $keys -and $InputParameters.GetType().Name -eq 'CIMInstance')
+        {
+            $keys = ([Microsoft.Management.Infrastructure.CIMInstance]$InputParameters).CimInstanceProperties.Name
+            $InputParameters = ([Microsoft.Management.Infrastructure.CIMInstance]$InputParameters)
+        }
+        foreach ($parameterName in $keys)
+        {
+            try
+            {
+                if ($null -ne $InputParameters.$parameterName)
+                {
+                    Write-Verbose -Message "Analyzing parameter {$parameterName}"
+
+                    $parameterType  = $InputParameters.$parameterName.GetType().Name
+                    $parameterValue = $InputParameters.$parameterName
+
+                    # If the value is an array of CIMInstance, recursively call back the current function
+                    # for each instance.
+                    if ($parameterType -eq "CIMInstance[]")
+                    {
+                        Write-Verbose -Message "Entry is a CIMInstance[]"
+                        $flattenValue = @()
+                        foreach ($cimObject in $parameterValue)
+                        {
+                            # Recurse to flatten each object.
+                            $flattenValue += ConvertTo-M365DSCFlatParameterHashtable -InputParameters $cimObject
+                        }
+                        $result.Add($parameterName, $flattenValue)
+                    }
+                    elseif ($parameterType -eq 'CIMInstance')
+                    {
+                        Write-Verbose -Message "Entry is a CIMInstance:`r`n$parameterValue"
+                        $flattenValue = ConvertTo-M365DSCFlatParameterHashtable -InputParameters $parameterValue
+                        $result.Add($parameterName, $flattenValue)
+                    }
+                    else
+                    {
+                        Write-Verbose -Message "Entry is a key/value pair."
+                        $result.Add($parameterName, $parameterValue)
+                    }
+                }
+            }
+            catch
+            {
+                Write-Verbose -Message "Error {$parameterName}: $_"
+            }
+        }
+    }
+    catch
+    {
+        Write-Verbose -Message $_
+    }
+    return $result
+}
 
 <#
 .Description
@@ -705,6 +805,7 @@ function Test-M365DSCParameterState
                 -and ($_ -ne 'TenantId') -and ($_ -ne 'ApplicationSecret') `
                 -and ($_ -ne 'ManagedIdentity') -and ($_ -ne 'AccessTokens'))
         {
+            Write-Verbose -Message "Evaluating key {$_}"
             if (($CurrentValues.ContainsKey($_) -eq $false) `
                     -or ($CurrentValues.$_ -ne $DesiredValues.$_) `
                     -or (($DesiredValues.ContainsKey($_) -eq $true) -and ($null -ne $DesiredValues.$_ -and $DesiredValues.$_.GetType().IsArray)))
@@ -773,6 +874,7 @@ function Test-M365DSCParameterState
                                 if ($CurrentValues.$fieldName.GetType().Name -ne 'CimInstance' -and `
                                     $CurrentValues.$fieldName.GetType().Name -ne 'CimInstance[]')
                                 {
+                                    Write-Verbose -Message "Comparing custom object arrays"
                                     $arrayCompare = Compare-PSCustomObjectArrays -CurrentValues $CurrentValues.$fieldName `
                                         -DesiredValues $AllDesiredValuesAsArray
                                 }
@@ -970,7 +1072,9 @@ function Test-M365DSCParameterState
                                     $currentEntry = @{ }
                                     foreach ($key in $item.Keys)
                                     {
+                                        Write-Verbose -Message "Checking desired value key {$key}"
                                         $value = $item.$key
+                                        Write-Verbose -Message "Key value = {$value}"
                                         if ([System.String]::IsNullOrEmpty($value))
                                         {
                                             $value = $null
@@ -986,13 +1090,16 @@ function Test-M365DSCParameterState
                                 }
                                 else
                                 {
+                                    Write-Verbose -Message "Current value is not null"
                                     $AllCurrentValuesAsArray = @()
                                     foreach ($item in $CurrentValues.$fieldName)
                                     {
                                         $currentEntry = @{ }
                                         foreach ($key in $item.Keys)
                                         {
+                                            Write-Verbose -Message "Checking current value key {$key}"
                                             $value = $item.$key
+                                            Write-Verbose -Message "Key value = {$value}"
                                             if ([System.String]::IsNullOrEmpty($value))
                                             {
                                                 $value = $null
@@ -1001,6 +1108,9 @@ function Test-M365DSCParameterState
                                         }
                                         $AllCurrentValuesAsArray += [PSCustomObject]$currentEntry
                                     }
+                                    Write-Verbose -Message "Comparing CurrentValues and DesiredValues"
+                                    Write-Verbose -Message "AllCurrentValuesAsArray: $($AllCurrentValuesAsArray | Out-String)"
+                                    Write-Verbose -Message "AllDesiredValuesAsArray: $($AllDesiredValuesAsArray | Out-String)"
                                     $arrayCompare = Compare-PSCustomObjectArrays -CurrentValues $AllCurrentValuesAsArray `
                                         -DesiredValues $AllDesiredValuesAsArray
                                     if ($null -ne $arrayCompare)
@@ -5174,6 +5284,7 @@ Export-ModuleMember -Function @(
     'Confirm-ImportedCmdletIsAvailable',
     'Confirm-M365DSCDependencies',
     'Convert-M365DscHashtableToString',
+    "ConvertTo-M365DSCFlatParameterHashtable",
     'ConvertTo-SPOUserProfilePropertyInstanceString',
     'Export-M365DSCConfiguration',
     'Get-AllSPOPackages',
