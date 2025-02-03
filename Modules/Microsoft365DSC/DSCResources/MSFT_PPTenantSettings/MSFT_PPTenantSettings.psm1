@@ -597,6 +597,7 @@ function Set-TargetResource
 
     $SetParameters = $PSBoundParameters
     $RequestBody = Get-M365DSCPowerPlatformTenantSettings -Parameters $SetParameters
+    Write-Verbose -Message "Updating Tenant Settings with parameters:`r`n$(ConvertTo-Json $RequestBody -Depth 10)"
     Set-TenantSettings -RequestBody $RequestBody | Out-Null
 }
 
@@ -972,71 +973,69 @@ function Get-M365DSCPowerPlatformTenantSettings
     )
 
     $result = @{
-        walkMeOptOut                                   = $Parameters.WalkMeOptOut
-        disableNPSCommentsReachout                     = $Parameters.DisableNPSCommentsReachout
-        disableNewsletterSendout                       = $Parameters.DisableNewsletterSendout
-        disableEnvironmentCreationByNonAdminUsers      = $Parameters.DisableEnvironmentCreationByNonAdminUsers
-        disablePortalsCreationByNonAdminUsers          = $Parameters.DisablePortalsCreationByNonAdminUsers
-        disableSurveyFeedback                          = $Parameters.DisableSurveyFeedback
-        disableSurveyScreenshots                       = $Parameters.DisableSurveyScreenshots
-        disableTrialEnvironmentCreationByNonAdminUsers = $Parameters.DisableTrialEnvironmentCreationByNonAdminUsers
-        disableCapacityAllocationByEnvironmentAdmins   = $Parameters.DisableCapacityAllocationByEnvironmentAdmins
-        disableSupportTicketsVisibleByAllUsers         = $Parameters.DisableSupportTicketsVisibleByAllUsers
+        walkMeOptOut                                   = $Parameters.walkMeOptOut
+        disableNPSCommentsReachout                     = $Parameters.disableNPSCommentsReachout
+        disableNewsletterSendout                       = $Parameters.disableNewsletterSendout
+        disableEnvironmentCreationByNonAdminUsers      = $Parameters.disableEnvironmentCreationByNonAdminUsers
+        disablePortalsCreationByNonAdminUsers          = $Parameters.disablePortalsCreationByNonAdminUsers
+        disableSurveyFeedback                          = $Parameters.disableSurveyFeedback
+        disableSurveyScreenshots                       = $Parameters.disableSurveyScreenshots
+        disableTrialEnvironmentCreationByNonAdminUsers = $Parameters.disableTrialEnvironmentCreationByNonAdminUsers
+        disableCapacityAllocationByEnvironmentAdmins   = $Parameters.disableCapacityAllocationByEnvironmentAdmins
+        disableSupportTicketsVisibleByAllUsers         = $Parameters.disableSupportTicketsVisibleByAllUsers
         powerPlatform                                  = @{
             search                 = @{
-                disableDocsSearch      = $Parameters.DisableDocsSearch
-                disableCommunitySearch = $Parameters.DisableCommunitySearch
-                disableBingVideoSearch = $Parameters.DisableBingVideoSearch
+                disableDocsSearch      = $Parameters.disableDocsSearch
+                disableCommunitySearch = $Parameters.disableCommunitySearch
+                disableBingVideoSearch = $Parameters.disableBingVideoSearch
             }
             teams                  = @{
-                shareWithColleaguesUserLimit = $Parameters.ShareWithColleaguesUserLimit
+                shareWithColleaguesUserLimit = $Parameters.shareWithColleaguesUserLimit
             }
             powerApps              = @{
-                disableShareWithEveryone             = $Parameters.DisableShareWithEveryone
-                enableGuestsToMake                   = $Parameters.EnableGuestsToMake
-                disableMakerMatch                    = $Parameters.DisableMakerMatch
-                disableUnusedLicenseAssignment       = $Parameters.DisableUnusedLicenseAssignment
-                disableCreateFromImage               = $Parameters.DisableCreateFromImage
-                disableCreateFromFigma               = $Parameters.DisableCreateFromFigma
-                enableCanvasAppInsights              = $Parameters.EnableCanvasAppInsights
-                disableConnectionSharingWithEveryone = $Parameters.DisableConnectionSharingWithEveryone
-                allowNewOrgChannelDefault            = $Parameters.AllowNewOrgChannelDefault
-                disableCopilot                       = $Parameters.DisableCopilot
+                disableShareWithEveryone             = $Parameters.disableShareWithEveryone
+                enableGuestsToMake                   = $Parameters.enableGuestsToMake
+                disableMakerMatch                    = $Parameters.disableMakerMatch
+                disableUnusedLicenseAssignment       = $Parameters.disableUnusedLicenseAssignment
+                disableCreateFromImage               = $Parameters.disableCreateFromImage
+                disableCreateFromFigma               = $Parameters.disableCreateFromFigma
+                enableCanvasAppInsights              = $Parameters.enableCanvasAppInsights
+                disableConnectionSharingWithEveryone = $Parameters.disableConnectionSharingWithEveryone
+                allowNewOrgChannelDefault            = $Parameters.allowNewOrgChannelDefault
+                disableCopilot                       = $Parameters.disableCopilot
             }
             environments           = @{
-                disablePreferredDataLocationForTeamsEnvironment = $Parameters.DisablePreferredDataLocationForTeamsEnvironment
+                disablePreferredDataLocationForTeamsEnvironment = $Parameters.disablePreferredDataLocationForTeamsEnvironment
             }
             powerAutomate          = @{
-                disableCopilotWithBing = $Parameters.DisableCopilotWithBing
+                disableCopilotWithBing = $Parameters.disableCopilotWithBing
             }
             governance             = @{
-                disableAdminDigest                                 = $Parameters.DisableAdminDigest
-                disableDeveloperEnvironmentCreationByNonAdminUsers = $Parameters.DisableDeveloperEnvironmentCreationByNonAdminUsers
-                enableDefaultEnvironmentRouting                    = $Parameters.EnableDefaultEnvironmentRouting
-                policy                                             = @(
-                    @{
-                        enableDesktopFlowDataPolicyManagement = $Parameters.EnableDesktopFlowDataPolicyManagement
-                    }
-                )
-                environmentRoutingAllMakers                        = $Parameters.EnvironmentRoutingAllMakers
+                disableAdminDigest                                 = $Parameters.disableAdminDigest
+                disableDeveloperEnvironmentCreationByNonAdminUsers = $Parameters.disableDeveloperEnvironmentCreationByNonAdminUsers
+                enableDefaultEnvironmentRouting                    = $Parameters.enableDefaultEnvironmentRouting
+                policy                                             = @{
+                        enableDesktopFlowDataPolicyManagement = $Parameters.enableDesktopFlowDataPolicyManagement
+                }
+                environmentRoutingAllMakers                        = $Parameters.environmentRoutingAllMakers
             }
             teamsIntegration       = @{
-                shareWithColleaguesUserLimit = $Parameters.ShareWithColleaguesUserLimit
+                shareWithColleaguesUserLimit = $Parameters.shareWithColleaguesUserLimit
             }
             licensing              = @{
-                disableBillingPolicyCreationByNonAdminUsers     = $Parameters.DisableBillingPolicyCreationByNonAdminUsers
-                enableTenantCapacityReportForEnvironmentAdmins  = $Parameters.EnableTenantCapacityReportForEnvironmentAdmins
-                storageCapacityConsumptionWarningThreshold      = $Parameters.StorageCapacityConsumptionWarningThreshold
-                enableTenantLicensingReportForEnvironmentAdmins = $Parameters.EnableTenantLicensingReportForEnvironmentAdmins
-                disableUseOfUnassignedAIBuilderCredits          = $Parameters.DisableUseOfUnassignedAIBuilderCredits
+                disableBillingPolicyCreationByNonAdminUsers     = $Parameters.disableBillingPolicyCreationByNonAdminUsers
+                enableTenantCapacityReportForEnvironmentAdmins  = $Parameters.enableTenantCapacityReportForEnvironmentAdmins
+                storageCapacityConsumptionWarningThreshold      = $Parameters.storageCapacityConsumptionWarningThreshold
+                enableTenantLicensingReportForEnvironmentAdmins = $Parameters.enableTenantLicensingReportForEnvironmentAdmins
+                disableUseOfUnassignedAIBuilderCredits          = $Parameters.disableUseOfUnassignedAIBuilderCredits
             }
             powerPages             = @{
-                enableGenerativeAIFeaturesForSiteUsers            = $Parameters.EnableGenerativeAIFeaturesForSiteUsers
-                enableExternalAuthenticationProvidersInPowerPages = $Parameters.EnableExternalAuthenticationProvidersInPowerPages
+                enableGenerativeAIFeaturesForSiteUsers            = $Parameters.enableGenerativeAIFeaturesForSiteUsers
+                enableExternalAuthenticationProvidersInPowerPages = $Parameters.enableExternalAuthenticationProvidersInPowerPages
             }
             champions              = @{
-                disableChampionsInvitationReachout   = $Parameters.DisableChampionsInvitationReachout
-                disableSkillsMatchInvitationReachout = $Parameters.DisableSkillsMatchInvitationReachout
+                disableChampionsInvitationReachout   = $Parameters.disableChampionsInvitationReachout
+                disableSkillsMatchInvitationReachout = $Parameters.disableSkillsMatchInvitationReachout
             }
             intelligence           = @{
                 disableCopilotFeedback         = $Parameters.disableCopilotFeedback
