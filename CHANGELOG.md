@@ -1,5 +1,10 @@
 # Change log for Microsoft365DSC
 
+# UNRELEASED
+
+* VERoleAssignment
+  * Initial release.
+
 # 1.25.305.1
 
 * AADApplication
