@@ -2,64 +2,88 @@ $Script:IsPowerShellCore = $PSVersionTable.PSEdition -eq 'Core'
 $Script:IsPsResourceGetAvailable = $null -ne (Get-Module -Name Microsoft.PowerShell.PSResourceGet -ListAvailable)
 $Script:M365DSCDependenciesValidated = $false
 $Script:M365DSCGraphShimLoaded = $false
-if ($null -eq $Script:M365DSCDependencies)
+
+<#
+.DESCRIPTION
+    This function performs the one-time initialization of the M365DSC dependency and resource-settings
+    metadata used throughout this module. It is wrapped in a function (rather than run as top-level module
+    code) so that the scratch/intermediate variables it uses are released once it returns, instead of being
+    pinned for the lifetime of the session as module-scope variables.
+
+.FUNCTIONALITY
+    Internal
+#>
+function Initialize-M365DSCModuleMgmt
 {
-    $Script:M365DSCDependencies = [System.Collections.Generic.Dictionary[System.String, System.Object]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $Script:M365DSCDevDependencies = [System.Collections.Generic.Dictionary[System.String, System.Object]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $dependencies = (Import-PowerShellDataFile "$PSScriptRoot/../Dependencies/Manifest.psd1").Dependencies
-    $devDependencies = (Import-PowerShellDataFile "$PSScriptRoot/../Dependencies/DevManifest.psd1").Dependencies
-    foreach ($dependency in $dependencies)
+    [CmdletBinding()]
+    param()
+
+    if ($null -eq $Script:M365DSCDependencies)
     {
-        # TODO: Review again once ModuleFast can work with additional properties
-        # https://github.com/microsoft/Microsoft365DSC/pull/6726
-        # https://github.com/ykuijs/M365DSC_CICD/issues/53
-        if ($dependency.ModuleName -eq 'PnP.PowerShell')
+        $Script:M365DSCDependencies = [System.Collections.Generic.Dictionary[System.String, System.Object]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $Script:M365DSCDevDependencies = [System.Collections.Generic.Dictionary[System.String, System.Object]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $dependencies = (Import-PowerShellDataFile "$PSScriptRoot/../Dependencies/Manifest.psd1").Dependencies
+        $devDependencies = (Import-PowerShellDataFile "$PSScriptRoot/../Dependencies/DevManifest.psd1").Dependencies
+        foreach ($dependency in $dependencies)
         {
-            $dependency.DependsOn = @('Microsoft.Graph.Authentication')
+            # TODO: Review again once ModuleFast can work with additional properties
+            # https://github.com/microsoft/Microsoft365DSC/pull/6726
+            # https://github.com/ykuijs/M365DSC_CICD/issues/53
+            if ($dependency.ModuleName -eq 'PnP.PowerShell')
+            {
+                $dependency.DependsOn = @('Microsoft.Graph.Authentication')
+            }
+            $Script:M365DSCDependencies.Add($dependency.ModuleName, $dependency)
         }
-        $Script:M365DSCDependencies.Add($dependency.ModuleName, $dependency)
-    }
 
-    foreach ($devDependency in $devDependencies)
-    {
-        $Script:M365DSCDevDependencies.Add($devDependency.ModuleName, $devDependency)
-    }
-
-    $commandToModuleMap = @{}
-    $Script:M365DSCResourceSettings = [System.Collections.Generic.Dictionary[System.String, System.Object]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($file in (Get-ChildItem -Path "$PSScriptRoot/../DSCResources" -Filter 'settings.json' -Recurse)) {
-        Write-Verbose -Message "Processing settings.json file at path: $($file.FullName)"
-        $jsonContent = [System.IO.File]::ReadAllText($file.FullName) | ConvertFrom-Json
-        foreach ($commandMap in ($jsonContent.commands | Where-Object { $_.module -notin $Script:M365DSCDevDependencies.Keys })) {
-            $commandToModuleMap[$commandMap.module] += @($commandMap.cmdlets)
+        foreach ($devDependency in $devDependencies)
+        {
+            $Script:M365DSCDevDependencies.Add($devDependency.ModuleName, $devDependency)
         }
-        $directoryName = (Split-Path -Path $file.DirectoryName -Leaf).Replace('MSFT_', '')
-        $Script:M365DSCResourceSettings.Add($directoryName, @{
-            requiredModules = $jsonContent.requiredModules | Where-Object { $_ -notin $Script:M365DSCDevDependencies.Keys }
-            commands = $jsonContent.commands | Where-Object { $_.module -notin $Script:M365DSCDevDependencies.Keys }
-            mode = $jsonContent.mode
-        })
-    }
 
-    Write-Verbose -Message "Loading current configuration from config.json"
-    $Script:M365DSCValidatedDependencies = [System.Collections.Generic.List[System.String]]::new($Script:M365DSCDependencies.Count + $Script:M365DSCDevDependencies.Count)
-    $configAsPsCustomObject = Get-Content -Path "$PSScriptRoot/../config.json" | ConvertFrom-Json
-    $configAsHashtable = @{}
-    foreach ($property in $configAsPsCustomObject.PSObject.Properties)
-    {
-        $configAsHashtable.Add($property.Name, $property.Value)
+        $commandToModuleMap = @{}
+        $Script:M365DSCResourceSettings = [System.Collections.Generic.Dictionary[System.String, System.Object]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($file in (Get-ChildItem -Path "$PSScriptRoot/../DscResources" -Filter 'settings.json' -Recurse -File)) {
+            Write-Verbose -Message "Processing settings.json file at path: $($file.FullName)"
+            $jsonContent = [System.IO.File]::ReadAllText($file.FullName) | ConvertFrom-Json
+            foreach ($commandMap in ($jsonContent.commands | Where-Object -Property module -NotIn $Script:M365DSCDevDependencies.Keys)) {
+                $commandToModuleMap[$commandMap.module] += @($commandMap.cmdlets)
+            }
+            $directoryName = (Split-Path -Path $file.DirectoryName -Leaf).Replace('MSFT_', '')
+            $Script:M365DSCResourceSettings.Add($directoryName, @{
+                requiredModules = $jsonContent.requiredModules | Where-Object { $_ -notin $Script:M365DSCDevDependencies.Keys }
+                mode = $jsonContent.mode
+            })
+        }
+
+        Write-Verbose -Message "Loading current configuration from config.json"
+        $Script:M365DSCValidatedDependencies = [System.Collections.Generic.List[System.String]]::new($Script:M365DSCDependencies.Count + $Script:M365DSCDevDependencies.Count)
+        $configAsPsCustomObject = Get-Content -Path "$PSScriptRoot/../config.json" | ConvertFrom-Json
+        $configAsHashtable = @{}
+        foreach ($property in $configAsPsCustomObject.PSObject.Properties)
+        {
+            $configAsHashtable.Add($property.Name, $property.Value)
+        }
+        $Script:CurrentConfiguration = $configAsHashtable
+        $globalRequiredModules = $Script:CurrentConfiguration.requiredModules
+        foreach ($entry in $commandToModuleMap.GetEnumerator())
+        {
+            $sortedFunctions = @($globalRequiredModules.$($entry.Key)) + @($entry.Value) | Sort-Object -Unique
+            $Script:M365DSCDependencies[$entry.Key].Commands = $sortedFunctions
+        }
+        $Script:M365DSCRequiredModules = @($globalRequiredModules.psobject.Properties.Name)
+        $Script:M365DSCRequiredModulesLoaded = $false
     }
-    $Script:CurrentConfiguration = $configAsHashtable
-    $globalRequiredModules = $Script:CurrentConfiguration.requiredModules
-    foreach ($entry in $commandToModuleMap.GetEnumerator())
-    {
-        $sortedFunctions = @($globalRequiredModules.$($entry.Key)) + @($entry.Value) | Sort-Object -Unique
-        $Script:M365DSCDependencies[$entry.Key].Commands = $sortedFunctions
-    }
-    $Script:M365DSCRequiredModules = @($globalRequiredModules.psobject.Properties.Name)
-    $Script:M365DSCRequiredModulesLoaded = $false
 }
+Initialize-M365DSCModuleMgmt
 
+<#
+.SYNOPSIS
+    Returns resource settings metadata loaded by module management.
+
+.DESCRIPTION
+    Returns the in-memory dictionary of resource settings built from each resource settings.json file.
+#>
 function Get-M365DSCResourceSettings
 {
     [CmdletBinding()]
@@ -68,6 +92,13 @@ function Get-M365DSCResourceSettings
     return $Script:M365DSCResourceSettings
 }
 
+<#
+.SYNOPSIS
+    Returns globally required module names for Microsoft365DSC.
+
+.DESCRIPTION
+    Returns the module names defined as required in the module configuration.
+#>
 function Get-M365DSCRequiredModules
 {
     [CmdletBinding()]
@@ -76,6 +107,16 @@ function Get-M365DSCRequiredModules
     return $Script:M365DSCRequiredModules
 }
 
+<#
+.SYNOPSIS
+    Sets the required-modules-loaded state flag.
+
+.DESCRIPTION
+    Updates the module-scope flag used to track whether required modules were loaded in the current session.
+
+.PARAMETER Value
+    Specifies the new loaded state value.
+#>
 function Set-M365DSCRequiredModulesLoaded
 {
     [CmdletBinding()]
@@ -87,6 +128,13 @@ function Set-M365DSCRequiredModulesLoaded
     $Script:M365DSCRequiredModulesLoaded = $Value
 }
 
+<#
+.SYNOPSIS
+    Returns whether required modules are marked as loaded.
+
+.DESCRIPTION
+    Returns the module-scope boolean state indicating whether required modules were loaded.
+#>
 function Test-IsM365DSCRequiredModulesLoaded
 {
     [CmdletBinding()]
@@ -95,6 +143,16 @@ function Test-IsM365DSCRequiredModulesLoaded
     return $Script:M365DSCRequiredModulesLoaded
 }
 
+<#
+.SYNOPSIS
+    Returns the current Microsoft365DSC module configuration.
+
+.DESCRIPTION
+    Returns a cloned hashtable of the loaded module configuration values.
+
+.OUTPUTS
+    System.Collections.Hashtable
+#>
 function Get-M365DSCModuleConfiguration
 {
     [CmdletBinding()]
@@ -104,6 +162,19 @@ function Get-M365DSCModuleConfiguration
     return $Script:CurrentConfiguration.Clone()
 }
 
+<#
+.SYNOPSIS
+    Updates a single Microsoft365DSC module configuration value.
+
+.DESCRIPTION
+    Sets a configuration entry in the current module configuration hashtable.
+
+.PARAMETER Key
+    Specifies the configuration key to update.
+
+.PARAMETER Value
+    Specifies the value to assign to the configuration key.
+#>
 function Set-M365DSCModuleConfiguration
 {
     [CmdletBinding()]
@@ -125,8 +196,12 @@ function Set-M365DSCModuleConfiguration
 }
 
 <#
+.SYNOPSIS
+    Validates that required Microsoft365DSC dependencies are installed.
+
 .DESCRIPTION
-    This function checks if all M365DSC dependencies are present
+    Checks dependency health and throws when required module versions are missing.
+    Validation can be skipped by session flags already used by Microsoft365DSC.
 
 .FUNCTIONALITY
     Internal
@@ -170,11 +245,15 @@ function Confirm-M365DSCDependencies
 }
 
 <#
+.SYNOPSIS
+    Ensures a dependency module is loaded at the required version.
+
 .DESCRIPTION
-    This function checks if a specific module is loaded and validates its version against the required version specified in the M365DSC dependencies manifest.
+    Loads dependency modules on demand, validates versions, and recursively validates dependency chains.
+    For Graph typed modules, it applies the Microsoft365DSC Graph shim behavior.
 
 .PARAMETER ModuleName
-    The name of the module to check and validate.
+    Specifies the dependency module name to validate and load.
 
 .EXAMPLE
     PS> Confirm-M365DSCLoadedModule -ModuleName 'Microsoft.Graph.Authentication'
@@ -210,7 +289,7 @@ function Confirm-M365DSCLoadedModule
             # Ensure Microsoft.Graph.Authentication is loaded first
             Confirm-M365DSCLoadedModule -ModuleName 'Microsoft.Graph.Authentication'
 
-            Import-Module -Name "$PSScriptRoot/M365DSCGraphShim.psm1" -Global -Force -DisableNameChecking
+            Import-Module -Name "$PSScriptRoot/M365DSCGraphShim.psd1" -Global -Force -DisableNameChecking -Function * -Cmdlet @() -Variable @() -Alias @()
             $Script:M365DSCGraphShimLoaded = $true
         }
         else
@@ -294,11 +373,14 @@ function Confirm-M365DSCLoadedModule
 }
 
 <#
+.SYNOPSIS
+    Validates dependencies required by a DSC resource module.
+
 .DESCRIPTION
-    This function checks the required dependencies for a specific M365DSC module and validates that they are loaded.
+    Resolves required modules from resource settings and validates each dependency before resource execution.
 
 .PARAMETER ModuleName
-    The name of the DSC resource for which to check dependencies.
+    Specifies the DSC resource module name whose dependencies should be validated.
 
 .EXAMPLE
     PS> Confirm-M365DSCModuleDependency -ModuleName 'MSFT_AADApplication'
@@ -333,8 +415,11 @@ function Confirm-M365DSCModuleDependency
 }
 
 <#
+.SYNOPSIS
+    Checks whether newer versions exist for configured dependencies.
+
 .DESCRIPTION
-    This function checks if new versions are available for the M365DSC dependencies
+    Queries the gallery for each configured dependency and reports modules with newer available versions.
 
 .EXAMPLE
     PS> Test-M365DSCDependenciesForNewVersions
@@ -380,11 +465,15 @@ function Test-M365DSCDependenciesForNewVersions
 }
 
 <#
+.SYNOPSIS
+    Validates the installed Microsoft365DSC module version.
+
 .DESCRIPTION
-    This function validates there are no updates to the module or it's dependencies and no multiple versions are present on the local system.
+    Compares local and gallery module versions and reports when a newer Microsoft365DSC module is available.
+
 
 .EXAMPLE
-    Test-M365DSCModuleValidity
+    PS> Test-M365DSCModuleValidity
 
 .FUNCTIONALITY
     Public
@@ -430,11 +519,14 @@ function Test-M365DSCModuleValidity
 }
 
 <#
+.SYNOPSIS
+    Removes outdated Microsoft365DSC module and dependency versions.
+
 .DESCRIPTION
-    This function uninstalls all previous M365DSC dependencies and older versions of the module.
+    Scans installed module versions and removes outdated Microsoft365DSC and dependency versions while preserving required versions.
 
 .EXAMPLE
-    Uninstall-M365DSCOutdatedDependencies
+    PS> Uninstall-M365DSCOutdatedDependencies
 
 .FUNCTIONALITY
     Public
@@ -464,7 +556,7 @@ function Uninstall-M365DSCOutdatedDependencies
             catch
             {
                 $message = "Could not uninstall $($module.Name) Version $($module.Version)"
-                if ($_.Exception.Message -like "*Access to the path* is denied*" -and ($Scope -eq "AllUsers") -and -not
+                if ($_.Exception.Message -like "*Access to the path* is denied*" -and ($Scope -eq "AllUsers") -and ($PSEdition -eq 'Desktop' -or $IsWindows) -and -not
                     ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
                 {
                     $message += ' You need to run this command as a local administrator.'
@@ -494,7 +586,7 @@ function Uninstall-M365DSCOutdatedDependencies
                     Write-Verbose -Message "Skipping module {$($dependency.ModuleName)} as it is managed by Windows PowerShell."
                     continue
                 }
-                $found = Get-Module $dependency.ModuleName -ListAvailable | Where-Object -FilterScript { $_.Version -ne $dependency.RequiredVersion }
+                $found = Get-Module $dependency.ModuleName -ListAvailable | Where-Object -Property Version -NE $dependency.RequiredVersion
                 foreach ($foundModule in $found)
                 {
                     try
@@ -508,7 +600,7 @@ function Uninstall-M365DSCOutdatedDependencies
                     catch
                     {
                         $message = "Could not uninstall $($foundModule.Name) Version $($foundModule.Version)"
-                        if ($_.Exception.Message -like "*Access to the path* is denied*" -and
+                        if ($_.Exception.Message -like "*Access to the path* is denied*" -and ($PSEdition -eq 'Desktop' -or $IsWindows) -and
                             ($Scope -eq "AllUsers") -and -not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
                         {
                             $message += ' You need to run this command as a local administrator.'
@@ -539,7 +631,7 @@ function Uninstall-M365DSCOutdatedDependencies
     try
     {
         Write-Information -MessageData 'Checking Microsoft.Graph.Authentication'
-        $found = Get-Module $authModule.ModuleName -ListAvailable | Where-Object -FilterScript { $_.Version -ne $authModule.RequiredVersion }
+        $found = Get-Module $authModule.ModuleName -ListAvailable | Where-Object -Property Version -NE $authModule.RequiredVersion
         foreach ($foundModule in $found)
         {
             try
@@ -553,7 +645,7 @@ function Uninstall-M365DSCOutdatedDependencies
             catch
             {
                 $message = "Could not uninstall $($foundModule.Name) Version $($foundModule.Version)"
-                if ($_.Exception.Message -like "*Access to the path* is denied*" -and
+                if ($_.Exception.Message -like "*Access to the path* is denied*" -and ($PSEdition -eq 'Desktop' -or $IsWindows) -and
                     ($Scope -eq "AllUsers") -and -not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
                 {
                     $message += ' You need to run this command as a local administrator.'
@@ -572,26 +664,32 @@ function Uninstall-M365DSCOutdatedDependencies
 }
 
 <#
+.SYNOPSIS
+    Installs or validates Microsoft365DSC dependencies.
+
 .DESCRIPTION
-    This function installs all missing M365DSC dependencies
+    Validates, installs, or force-refreshes dependency modules according to manifest requirements and selected installation options.
 
 .PARAMETER Force
-    Specifies that all dependencies should be forcefully imported again.
+    Indicates that dependencies should be reinstalled even when required versions are present.
 
 .PARAMETER ValidateOnly
-    Specifies that the function should only return the dependencies that are not installed.
+    Indicates that only validation should run and missing dependencies should be returned.
 
 .PARAMETER Scope
-    Specifies the scope of the update of the module. The default value is AllUsers(needs to run as elevated user).
+    Specifies the installation scope for dependency modules.
 
 .PARAMETER Proxy
-    Specifies the proxy server to use for the module installation.
+    Specifies the proxy server used for module installation requests.
 
 .PARAMETER Repository
-    Specifies the PowerShell repository name to use for the installation of the dependencies.
+    Specifies the repository used to install dependencies.
 
 .PARAMETER UsePowerShellGet
-    Specifies that Install-Module should be used for the installation of the dependencies instead of Install-PSResource.
+    Indicates that Install-Module should be used instead of Install-PSResource.
+
+.PARAMETER Development
+    Indicates that development dependencies should also be processed.
 
 .EXAMPLE
     PS> Update-M365DSCDependencies
@@ -680,7 +778,9 @@ function Update-M365DSCDependencies
         {
             $Script:M365DSCDevDependencies.Values.CopyTo($dependencies, $Script:M365DSCDependencies.Count)
         }
-        foreach ($dependency in ($dependencies | Where-Object { $null -ne $_ }))
+
+        # $null comparison is correct in that way because the left-hand side is always an array and the right-hand side is a single value
+        foreach ($dependency in ($dependencies -ne $null))
         {
             Write-Progress -Activity 'Scanning dependencies' -PercentComplete ($i / $dependencies.Count * 100)
             try
@@ -692,12 +792,12 @@ function Update-M365DSCDependencies
                         Write-Verbose -Message "The dependency {$($dependency.ModuleName)} requires PowerShell Core. Skipping."
                         continue
                     }
-                    elseif ($dependency.PowerShellCore -eq $false -and $Script:IsPowerShellCore)
+                    elseif ($dependency.PowerShellCore -eq $false -and $Script:IsPowerShellCore -and $IsWindows)
                     {
                         Write-Verbose -Message "The dependency {$($dependency.ModuleName)} requires Windows PowerShell. Skipping."
                         continue
                     }
-                    $found = Get-Module $dependency.ModuleName -ListAvailable | Where-Object -FilterScript { $_.Version -eq $dependency.RequiredVersion }
+                    $found = Get-Module $dependency.ModuleName -ListAvailable | Where-Object -Property Version -EQ $dependency.RequiredVersion
                 }
 
                 if ((-not $found -or $Force) -and -not $ValidateOnly)
@@ -705,7 +805,7 @@ function Update-M365DSCDependencies
                     $errorFound = $false
                     try
                     {
-                        if ((-not(([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) -and ($Scope -eq "AllUsers"))
+                        if (($PSEdition -eq 'Desktop' -or $IsWindows) -and (-not(([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) -and ($Scope -eq "AllUsers"))
                         {
                             Write-Error 'Cannot update the dependencies for Microsoft365DSC. You need to run this command as a local administrator.'
                             $errorFound = $true
@@ -717,7 +817,7 @@ function Update-M365DSCDependencies
                     }
                     if (-not $errorFound)
                     {
-                        if (-not $dependency.PowerShellCore -and $Script:IsPowerShellCore)
+                        if (-not $dependency.PowerShellCore -and $Script:IsPowerShellCore -and $IsWindows)
                         {
                             Write-Warning "The dependency {$($dependency.ModuleName)} does not support PowerShell Core. Please run Update-M365DSCDependencies in Windows PowerShell."
                             continue
@@ -792,23 +892,26 @@ function Update-M365DSCDependencies
 }
 
 <#
+.SYNOPSIS
+    Updates Microsoft365DSC and refreshes dependency state.
+
 .DESCRIPTION
-    This function updates the module, dependencies and uninstalls outdated dependencies.
+    Updates the Microsoft365DSC module, reloads the latest installed version, updates dependencies, and optionally removes outdated versions.
 
 .PARAMETER Scope
-    Specifies the scope of the update of the module. The default value is AllUsers(needs to run as elevated user).
+    Specifies the installation scope used for update operations.
 
 .PARAMETER Proxy
-    Specifies the proxy server to use for the update.
+    Specifies the proxy server used for update operations.
 
 .PARAMETER BaseRepository
-    Specifies the PowerShell Repository name to use for the installation of the Microsoft365DSC module.
+    Specifies the repository used to update the Microsoft365DSC module.
 
 .PARAMETER DependencyRepository
-    Specifies the PowerShell Repository name to use for the installation of the dependencies of the Microsoft365DSC module.
+    Specifies the repository used to update dependencies.
 
 .PARAMETER NoUninstall
-    Indicates if outdated dependencies and modules should be uninstalled.
+    Indicates that outdated module and dependency versions should not be removed.
 
 .EXAMPLE
     PS> Update-M365DSCModule

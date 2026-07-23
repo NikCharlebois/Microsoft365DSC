@@ -60,8 +60,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                     Scope            = '/subscriptions/12345678-1234-1234-1234-123456789012'
                     PrincipalId      = '123456'
                     PrincipalType    = 'User'
-                    StartDateTime    = [System.DateTime]::Parse('2023-09-01T02:40:44Z')
-                    EndDateTime      = [System.DateTime]::Parse('2025-10-31T02:40:09Z')
+                    StartDateTime    = [System.DateTime]::Parse('2023-09-01T02:40:44Z').ToUniversalTime()
+                    EndDateTime      = [System.DateTime]::Parse('2025-10-31T02:40:09Z').ToUniversalTime()
                 }
             }
 
@@ -93,7 +93,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId        = "00000000-0000-0000-0000-000000000000"
+                    Credential            = $Credential
                 }
 
                 Mock -CommandName Get-AzRoleAssignmentSchedule -MockWith {
@@ -129,7 +130,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
             }
 
@@ -162,7 +164,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
             }
 
@@ -191,7 +194,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
             }
 
@@ -225,7 +229,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
 
                 Mock -CommandName Get-AzRoleAssignmentSchedule -MockWith {
@@ -259,7 +264,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
 
                 Mock -CommandName Get-AzRoleAssignmentSchedule -MockWith {
@@ -293,7 +299,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
 
                 Mock -CommandName Get-AzRoleAssignmentSchedule -MockWith {
@@ -328,7 +335,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type        = 'afterDateTime'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
 
                 Mock -CommandName Get-AzRoleAssignmentSchedule -MockWith {
@@ -338,8 +346,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                         Scope            = '/providers/Microsoft.Management/managementGroups/rootGroup'
                         PrincipalId      = '123456'
                         PrincipalType    = 'User'
-                        StartDateTime    = [System.DateTime]::Parse('2023-09-01T02:40:44Z')
-                        EndDateTime      = [System.DateTime]::Parse('2025-10-31T02:40:09Z')
+                        StartDateTime    = [System.DateTime]::Parse('2023-09-01T02:40:44Z').ToUniversalTime()
+                        EndDateTime      = [System.DateTime]::Parse('2025-10-31T02:40:09Z').ToUniversalTime()
                     }
                 }
             }
@@ -369,7 +377,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type = 'noExpiration'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
 
                 Mock -CommandName Get-AzADGroup -MockWith {
@@ -420,7 +429,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                             type = 'noExpiration'
                         } -ClientOnly
                     } -ClientOnly
-                    Credential  = $Credential
+                    SubscriptionId       = "00000000-0000-0000-0000-000000000000"
+                    Credential           = $Credential
                 }
 
                 Mock -CommandName Get-AzRoleAssignmentSchedule -MockWith {
@@ -430,7 +440,7 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                         Scope            = '/providers/Microsoft.Management/managementGroups/rootGroup'
                         PrincipalId      = '123456'
                         PrincipalType    = 'User'
-                        StartDateTime    = [System.DateTime]::Parse('2021-09-01T14:30:00Z')
+                        StartDateTime    = [System.DateTime]::Parse('2021-09-01T14:30:00Z').ToUniversalTime()
                         EndDateTime      = $null
                     }
                 }
@@ -457,7 +467,8 @@ Describe -Name $Global:DscHelper.DescribeHeader -Fixture {
                 $Global:CurrentModeIsExport = $true
                 $Global:PartialExportFileName = "$(New-Guid).partial.ps1"
                 $testParams = @{
-                    Credential = $Credential
+                    SubscriptionId = "00000000-0000-0000-0000-000000000000"
+                    Credential     = $Credential
                 }
 
                 Mock -CommandName Get-AzManagementGroup -MockWith {

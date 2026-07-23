@@ -1,9 +1,20 @@
 [hashtable]$Script:M365DSCTelemetryConnectionToGraphParams = @{}
 
 <#
+.SYNOPSIS
+    Gets all resources that support the specified authentication method and determines the most secure authentication method supported by the resource.
+
 .DESCRIPTION
     This function gets all resources that support the specified authentication method and
     determines the most secure authentication method supported by the resource.
+
+.PARAMETER AuthenticationMethod
+    Specifies the authentication method to check for. Valid values are:
+    'ApplicationWithSecret', 'CertificateThumbprint', 'CertificatePath', 'Credentials',
+    'CredentialsWithTenantId', 'CredentialsWithApplicationId', 'ManagedIdentity', 'AccessTokens'.
+
+.PARAMETER Resources
+    Specifies the resources to check. If not specified, all resources will be checked.
 
 .FUNCTIONALITY
     Internal
@@ -26,7 +37,7 @@ function Get-M365DSCComponentsWithMostSecureAuthenticationType
 
     Initialize-M365DSCDllLoader -ErrorAction Stop
 
-    $dscResourcesPath = Join-Path -Path $PSScriptRoot -ChildPath '../DSCResources'
+    $dscResourcesPath = Join-Path -Path $PSScriptRoot -ChildPath '../DscResources'
     return [Microsoft365DSC.Connection.ConnectionHelper]::GetComponentsWithMostSecureAuthenticationType(
         $dscResourcesPath,
         $AuthenticationMethod,
@@ -35,8 +46,27 @@ function Get-M365DSCComponentsWithMostSecureAuthenticationType
 }
 
 <#
+.SYNOPSIS
+    Creates a new connection to the specified M365 workload.
+
 .DESCRIPTION
     This function creates a new connection to the specified M365 workload
+
+.PARAMETER Workload
+    Specifies the M365 workload to connect to. Valid values are:
+    'AdminAPI', 'Azure', 'AzureDevOPS', 'DefenderForEndpoint', 'EngageHub', 'ExchangeOnline',
+    'Fabric', 'Licensing', 'SecurityComplianceCenter', 'PnP', 'PowerPlatforms',
+    'PowerPlatformREST', 'MicrosoftTeams', 'MicrosoftGraph', 'SharePointOnlineREST', 'Tasks'.
+
+.PARAMETER InboundParameters
+    Specifies a hashtable of parameters to use for the connection. The keys and values in the hashtable should match the parameters of the Connect-M365Tenant function.
+
+.PARAMETER Url
+    Specifies the URL to use for the connection. This parameter is optional and can be used to override the default URL for the specified workload.
+
+.PARAMETER EnableSearchOnlySession
+    Specifies whether to enable a search-only session for the connection. This parameter is optional and can be used to limit the connection to read-only operations
+    for the SecurityComplianceCenter workload.
 
 .FUNCTIONALITY
     Internal
@@ -126,7 +156,7 @@ function New-M365DSCConnection
     Write-Verbose -Message "$($InboundParameters | Out-String)"
 
     #region Telemetry
-    $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+    $data = [System.Collections.Generic.Dictionary[[System.String], [System.Object]]]::new()
     $data.Add('Source', 'M365DSCUtil')
     $data.Add('Workload', $Workload)
 
@@ -193,6 +223,11 @@ function New-M365DSCConnection
     if (-not [System.String]::IsNullOrEmpty($Url))
     {
         $connectParams.Url = $Url
+    }
+
+    if ($Workload -eq 'Azure' -and -not [System.String]::IsNullOrEmpty($InboundParameters.SubscriptionId))
+    {
+        $connectParams.SubscriptionId = $InboundParameters.SubscriptionId
     }
 
     switch ($connectionMode)
@@ -322,8 +357,14 @@ function New-M365DSCConnection
 }
 
 <#
+.SYNOPSIS
+    Gets the authentication mode based on the specified parameters.
+
 .DESCRIPTION
     This function gets the used authentication mode based on the specified parameters
+
+.PARAMETER Parameters
+    Specifies a hashtable of parameters to use for determining the authentication mode. The keys and values in the hashtable should match the parameters of the Connect-M365Tenant function.
 
 .FUNCTIONALITY
     Internal
@@ -391,6 +432,9 @@ function Get-M365DSCAuthenticationMode
 }
 
 <#
+.SYNOPSIS
+    Retrieves the telemetry connection parameters for the current session.
+
 .DESCRIPTION
     This function retrieves the telemetry connection parameters for the current session.
 
@@ -406,8 +450,14 @@ function Get-M365DSCTelemetryConnectionParameter
 }
 
 <#
+.SYNOPSIS
+    Sets the telemetry connection parameters for the current session.
+
 .DESCRIPTION
     This function sets the telemetry connection parameters for the current session.
+
+.PARAMETER Parameters
+    Specifies a hashtable of parameters to set for the telemetry connection. The keys and values in the hashtable should match the parameters of the Connect-M365Tenant function.
 
 .FUNCTIONALITY
     Internal.

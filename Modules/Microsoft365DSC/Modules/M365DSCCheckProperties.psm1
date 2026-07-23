@@ -1,10 +1,19 @@
 <#
-.Description
+.SYNOPSIS
+    Checks if properties of existing resources are up to date.
+
+.DESCRIPTION
     This function checks if properties of existing resources are up to date.
     Creates a report about missing or outdated properties of existing resources
     and a list of missing resources.
 
-.Functionality
+.PARAMETER DestinationFolder
+    Specifies the destination folder where the report will be saved.
+
+.PARAMETER Credential
+    Specifies the credentials to use for connecting to Microsoft 365 workloads.
+
+.FUNCTIONALITY
     Internal
 #>
 function Get-PropertyReport
@@ -21,47 +30,62 @@ function Get-PropertyReport
     )
 
     # list of cmdlet parameters to be ignored
-    $invalidParameters = @('ErrorVariable', `
-            'ErrorAction', `
-            'InformationVariable', `
-            'InformationAction', `
-            'WarningVariable', `
-            'WarningAction', `
-            'OutVariable', `
-            'OutBuffer', `
-            'PipelineVariable', `
-            'Verbose', `
-            'WhatIf', `
-            'Debug',
+    $invalidParameters = @(
+        'ErrorVariable',
+        'ErrorAction',
+        'Force',
+        'HttpPipelinePrepend',
+        'InformationVariable',
+        'InformationAction',
+        'MsftInternalProcessingMode',
+        'WarningVariable',
+        'WarningAction',
+        'OutVariable',
+        'OutBuffer',
+        'PipelineVariable',
+        'Verbose',
+        'WhatIf',
+        'Debug',
         'Confirm',
-        'AsJob')
+        'AsJob'
+    )
 
     # list of M365 DSC resource properties to be ignored
-    $invalidProperties = @('ErrorVariable', `
-            'ErrorAction', `
-            'InformationVariable', `
-            'InformationAction', `
-            'WarningVariable', `
-            'WarningAction', `
-            'OutVariable', `
-            'OutBuffer', `
-            'PipelineVariable', `
-            'Verbose', `
-            'WhatIf', `
-            'Debug',
+    $invalidProperties = @(
+        'ErrorVariable',
+        'ErrorAction',
+        'Force',
+        'HttpPipelinePrepend',
+        'InformationVariable',
+        'InformationAction',
+        'MsftInternalProcessingMode',
+        'WarningVariable',
+        'WarningAction',
+        'OutVariable',
+        'OutBuffer',
+        'PipelineVariable',
+        'Verbose',
+        'WhatIf',
+        'Debug',
+        'Confirm',
+        'AsJob'
         'Credential',
         'ApplicationId',
+        'ApplicationSecret',
         'Ensure',
         'TenantId',
         'CertificateThumbprint',
         'CertificatePath',
         'CertificatePassword',
-        'IsSingleInstance')
+        'AccessTokens',
+        'ManagedIdentity',
+        'IsSingleInstance'
+    )
 
     # list of M365 workloads to check
     $workloads = @(
-        @{Name = 'ExchangeOnline'; ModuleName = 'ExchangeOnlineManagement'; CommandName = 'Get-Mailbox'; Prefix = 'EXO'; }
         @{Name = 'MicrosoftTeams'; ModuleName = 'MicrosoftTeams'; Prefix = 'Teams'; }
+        @{Name = 'ExchangeOnline'; ModuleName = 'ExchangeOnlineManagement'; CommandName = 'Get-Mailbox'; Prefix = 'EXO'; }
         @{Name = 'SecurityComplianceCenter'; ModuleName = 'ExchangeOnlineManagement'; CommandName = 'Set-ComplianceCase'; Prefix = 'SC'; }
     )
 
@@ -82,13 +106,16 @@ function Get-PropertyReport
         $PSBoundParameters.Add('Credential', $Credential)
     }
 
-    $folderPath = Join-Path $PSScriptRoot -ChildPath '../DSCResources'
+    $folderPath = Join-Path $PSScriptRoot -ChildPath '../DscResources'
     Write-Verbose "Folderpath of DSC resources: $folderPath"
 
     foreach ($module in $workloads)
     {
-        Write-Verbose "Connecting to {$($Module.Name)}"
-        $null = New-M365DSCConnection -Workload ($Module.Name) -InboundParameters $PSBoundParameters
+        if ($module.Name -ne 'MicrosoftTeams')
+        {
+            Write-Verbose "Connecting to {$($Module.Name)}"
+            $null = New-M365DSCConnection -Workload ($Module.Name) -InboundParameters $PSBoundParameters
+        }
 
         Write-Verbose "Getting list of cmdlets of {$($Module.ModuleName)}..."
         $CurrentModuleName = $Module.ModuleName
@@ -107,7 +134,7 @@ function Get-PropertyReport
         }
 
         $cmdlets = Get-Command -CommandType 'Function' -Module $CurrentModuleName
-        $setCmdlets = $cmdlets | Where-Object { $_.Name -like 'Set-*' }
+        $setCmdlets = $cmdlets | Where-Object -Property Name -Like 'Set-*'
 
         Write-Verbose "Found $($setCmdlets.Count) Set-* cmdlets for $($Module.ModuleName) ($($cmdlets.Count) in total)"
 
@@ -127,7 +154,7 @@ function Get-PropertyReport
             {
                 $resourceName = $resourceName -replace ('TeamsCs', 'Teams')
             }
-            $foundInFiles = Get-ChildItem -Path $folderPath | Where-Object { $_.Name -like $resourceName }
+            $foundInFiles = Get-ChildItem -Path $folderPath | Where-Object -Property Name -Like $resourceName
 
             if ($null -eq $foundInFiles)
             {
@@ -135,7 +162,7 @@ function Get-PropertyReport
                 if ($null -ne $resourceNameFromMapping)
                 {
                     $resourceName = 'MSFT_' + $module.Prefix + $resourceNameFromMapping
-                    $foundInFiles = Get-ChildItem -Path $folderPath | Where-Object { $_.Name -like $resourceName }
+                    $foundInFiles = Get-ChildItem -Path $folderPath | Where-Object -Property Name -Like $resourceName
                     if ($null -ne $foundInFiles)
                     {
                         $resourceExists = $true
@@ -152,7 +179,7 @@ function Get-PropertyReport
                 # Get parameter of cmdlet
                 Write-Verbose "Get parameters of cmdlet $($cmdlet.Name)"
                 $targetParameters = @()
-                $resourceParamters = @()
+                $resourceParameters = @()
                 $cmdletParameters = (Get-Command $cmdlet.Name).Parameters
 
                 foreach ($parameter in $cmdletParameters.Keys)
@@ -172,16 +199,16 @@ function Get-PropertyReport
                 {
                     if ($property -notin $invalidProperties)
                     {
-                        $resourceParamters += $property
+                        $resourceParameters += $property
                     }
                 }
                 Remove-Module -Name $resourceName -Force -Confirm:$false
 
                 # Compare properties
                 Write-Verbose "Compare parameters of $resourceName"
-                $difference = Compare-Object -ReferenceObject @($targetParameters | Select-Object) -DifferenceObject @($resourceParamters | Select-Object) -IncludeEqual
-                $missingProperties = ($difference | Where-Object { $_.SideIndicator -eq '<=' }).InputObject
-                $additionalProperties = ($difference | Where-Object { $_.SideIndicator -eq '=>' }).InputObject
+                $difference = Compare-Object -ReferenceObject @($targetParameters | Select-Object) -DifferenceObject @($resourceParameters | Select-Object) -IncludeEqual
+                $missingProperties = ($difference | Where-Object -Property SideIndicator -EQ '<=' ).InputObject
+                $additionalProperties = ($difference | Where-Object -Property SideIndicator -EQ '=>' ).InputObject
 
                 # Add to report
                 $cmdletResult = [PSCustomObject]@{

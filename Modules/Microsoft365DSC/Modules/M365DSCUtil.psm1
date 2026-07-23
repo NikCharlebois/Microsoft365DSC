@@ -2,14 +2,82 @@
 $Global:SessionSecurityCompliance = $null
 #endregion
 
+#region Push Notifications
+$Global:M365DSCPushNotificationsURI = $null
+$Global:M365DSCPushNotificationsHeaders = $null
+$Global:M365DSCPushNotificationsBody = $null
+#endregion
+
 $Script:M365DSCWorkloads = @('AAD', 'ADO', 'AZURE', 'COMMERCE', 'DEFENDER', 'EXO', 'FABRIC', 'INTUNE', 'O365', 'OD', 'PLANNER', 'PP', 'SC', 'SENTINEL', 'SH', 'SPO', 'TEAMS')
 
 <#
 .Description
-This function retrieves a Teams team by its name
+The Get-TemporaryPath function will return the temporary
+path specific to the OS. It will return $env:TEMP when run
+on Windows OS, '/tmp' when run in Linux and $env:TMPDIR when
+run on MacOS.
+
+.Example
+Get-TemporaryPath
+
+Get the temporary path (which will differ between operating system).
 
 .Functionality
-Internal
+Internal,Hidden
+#>
+function Get-TemporaryPath
+{
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    param ()
+
+    $temporaryPath = $null
+
+    switch ($true)
+    {
+        (-not (Test-Path -Path variable:IsWindows) -or ((Get-Variable -Name 'IsWindows' -ValueOnly -ErrorAction SilentlyContinue) -eq $true))
+        {
+            # Windows PowerShell or PowerShell 6+
+            $temporaryPath = (Get-Item -Path env:TEMP).Value
+        }
+
+        ((Get-Variable -Name 'IsMacOs' -ValueOnly -ErrorAction SilentlyContinue) -eq $true)
+        {
+            $temporaryPath = (Get-Item -Path env:TMPDIR).Value
+        }
+
+        ((Get-Variable -Name 'IsLinux' -ValueOnly -ErrorAction SilentlyContinue) -eq $true)
+        {
+            $temporaryPath = '/tmp'
+        }
+
+        default
+        {
+            throw 'Cannot set the temporary path. Unknown operating system.'
+        }
+    }
+
+    return $temporaryPath
+}
+
+$env:TEMP = Get-TemporaryPath
+
+<#
+.SYNOPSIS
+    Retrieves a Microsoft Teams team by display name.
+
+.DESCRIPTION
+    Queries Teams for a team matching the provided display name.
+    Retries briefly to account for eventual consistency and returns null when the team cannot be resolved.
+
+.PARAMETER TeamName
+    Specifies the display name of the team to resolve.
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    Hashtable
 #>
 function Get-TeamByName
 {
@@ -27,7 +95,7 @@ function Get-TeamByName
         $loopCounter = 0
         do
         {
-            $team = Get-Team -DisplayName $TeamName | Where-Object -FilterScript { $_.DisplayName -eq [System.Net.WebUtility]::UrlDecode($TeamName) }
+            $team = Get-Team -DisplayName $TeamName | Where-Object -Property DisplayName -EQ [System.Net.WebUtility]::UrlDecode($TeamName)
             if ($null -eq $team)
             {
                 Start-Sleep 5
@@ -56,10 +124,16 @@ function Get-TeamByName
 }
 
 <#
-.Description
-    This function converts a parameter hashtable to a string, for outputting to screen
+.SYNOPSIS
+    Converts a hashtable to Microsoft365DSC string format.
 
-.Functionality
+.DESCRIPTION
+    Uses the Microsoft365DSC converter assembly to serialize a hashtable into the string representation used by logging and display helpers.
+
+.PARAMETER Hashtable
+    Specifies the hashtable to convert.
+
+.FUNCTIONALITY
     Internal
 #>
 function Convert-M365DscHashtableToString
@@ -76,11 +150,20 @@ function Convert-M365DscHashtableToString
 }
 
 <#
-.Description
-This function checks if the specified cmdlet is available or not
+.SYNOPSIS
+    Tests whether an imported cmdlet is available in the current session.
 
-.Functionality
-Internal
+.DESCRIPTION
+    Checks command discovery for a cmdlet name and returns a boolean result.
+
+.PARAMETER CmdletName
+    Specifies the cmdlet name to look up.
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    System.Boolean
 #>
 function Confirm-ImportedCmdletIsAvailable
 {
@@ -112,11 +195,24 @@ function Confirm-ImportedCmdletIsAvailable
 }
 
 <#
+.SYNOPSIS
+    Normalizes an enumerable property value into a typed array.
+
 .DESCRIPTION
-    This function converts a property value to an array of specified element type.
+    Creates an array of the requested element type from the provided property value.
+    Used to ensure stable array typing in generated and compared values.
+
+.PARAMETER PropertyValue
+    Specifies the input value to convert to an array.
+
+.PARAMETER ElementType
+    Specifies the element type to use for the output array.
 
 .FUNCTIONALITY
     Internal
+
+.OUTPUTS
+    System.Array
 #>
 function Get-M365DSCArrayFromProperty
 {
@@ -145,11 +241,41 @@ function Get-M365DSCArrayFromProperty
 }
 
 <#
-.Description
-This function tests if the DSC hashtables have the same values
+.SYNOPSIS
+    Compares desired and current parameter values for drift.
 
-.Functionality
-Public
+.DESCRIPTION
+    Performs drift evaluation between desired and current values, records drift details, emits telemetry, and can write event log entries for drift and non-drift states.
+
+.PARAMETER CurrentValues
+    Specifies the current values retrieved from the tenant.
+
+.PARAMETER DesiredValues
+    Specifies the desired values to compare against.
+
+.PARAMETER ValuesToCheck
+    Specifies the property names that should be compared.
+
+.PARAMETER Source
+    Specifies the resource/source name used for logging and telemetry.
+
+.PARAMETER IncludedDrifts
+    Specifies precomputed drift details to include in comparison output.
+
+.PARAMETER NoEventMessage
+    Indicates that event log messages should not be written.
+
+.PARAMETER NoDriftReset
+    Indicates that global drift collections should not be reset before comparison.
+
+.PARAMETER ExcludedProperties
+    Specifies property names to skip during comparison.
+
+.FUNCTIONALITY
+    Public
+
+.OUTPUTS
+    System.Boolean
 #>
 function Test-M365DSCParameterState
 {
@@ -207,11 +333,7 @@ function Test-M365DSCParameterState
     #region Telemetry
     if (Test-IsM365DSCTelemetryEnabled)
     {
-        $data = [System.Collections.Generic.Dictionary[[System.String], [System.String]]]::new()
-        $data.Add('Resource', "$Source")
-        $data.Add('Method', 'Test-TargetResource')
-
-        $dataEvaluation = [System.Collections.Generic.Dictionary[[System.String], [System.String]]]::new()
+        $dataEvaluation = [System.Collections.Generic.Dictionary[[System.String], [System.Object]]]::new()
         $dataEvaluation.Add('Resource', "$Source")
         $dataEvaluation.Add('Method', 'Test-TargetResource')
         $dataEvaluation.Add('Tenant', $TenantName)
@@ -249,8 +371,8 @@ function Test-M365DSCParameterState
         $LCMState = $null
         try
         {
-            if (([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) `
-                -and $null -eq $Script:LCMInfo)
+            if (($PSEdition -eq 'Desktop' -or $IsWindows) -and ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) `
+                -and $null -eq $Script:LCMInfo )
             {
                 $Script:LCMInfo = Get-DscLocalConfigurationManager -ErrorAction Stop
 
@@ -301,7 +423,7 @@ function Test-M365DSCParameterState
 
         if (Test-IsM365DSCTelemetryEnabled)
         {
-            $driftedData = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+            $driftedData = [System.Collections.Generic.Dictionary[[System.String], [System.Object]]]::new()
             $driftedData.Add('Resource', $source.Split('_')[1])
             $driftedData.Add('Tenant', $TenantName)
 
@@ -384,7 +506,7 @@ function Test-M365DSCParameterState
     if (Test-IsM365DSCTelemetryEnabled)
     {
         $timeTaken = [System.DateTime]::Now.Subtract($startTime).TotalMilliseconds
-        $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+        $data = [System.Collections.Generic.Dictionary[[System.String], [System.Object]]]::new()
         $data.Add('Resource', $Source)
         $data.Add('Method', 'Test-M365DSCParameterState')
         $data.Add('TimeTakenMilliseconds', $timeTaken)
@@ -398,17 +520,40 @@ function Test-M365DSCParameterState
 }
 
 <#
-.Description
-    Centralized method to evaluate the result of the various Test-TargetResource functions
+.SYNOPSIS
+    Executes standardized target resource testing for a DSC resource.
+
+.DESCRIPTION
+    Retrieves current resource state, compares it with desired values, and returns the test result.
+    Optionally returns a detailed pass-through object and writes drift details to event logs.
+
+.PARAMETER DesiredValues
+    Specifies desired parameter values passed to the target resource.
+
+.PARAMETER ResourceName
+    Specifies the DSC resource name to test.
+
+.PARAMETER ExcludedProperties
+    Specifies property names to exclude from comparison.
+
+.PARAMETER IncludedProperties
+    Specifies the explicit property names to compare.
 
 .PARAMETER PostProcessing
-    Optional Func delegate that allows custom processing of the DesiredValues, CurrentValues and ValuesToCheck.
-    The function receives three hashtable parameters: DesiredValues, CurrentValues (from Get-TargetResource) and ValuesToCheck.
-    Additionally, it gets an array of objects as PostProcessingArgs.
-    The delegate must return a Tuple[Hashtable, Hashtable, Hashtable] where Item1 is the processed DesiredValues, Item2 is the processed CurrentValues and Item3 is the processed ValuesToCheck.
+    Specifies an optional callback to transform compare inputs before evaluation.
+
+.PARAMETER PostProcessingArgs
+    Specifies arguments passed to the post-processing callback.
+
+.PARAMETER PassThru
+    Indicates that a detailed result object should be returned instead of only a boolean.
 
 .FUNCTIONALITY
     Internal
+
+.OUTPUTS
+    System.Boolean
+    System.Collections.Hashtable
 #>
 function Test-M365DSCTargetResource
 {
@@ -476,7 +621,7 @@ function Test-M365DSCTargetResource
         [Microsoft365DSC.Cache.CacheManager]::LoadSchema($schemaContent)
     }
     $resourceDefinition = [Microsoft365DSC.Utilities.Utilities]::FilterLoadedCimClassesByName("MSFT_$ResourceName")
-    $resourceKeys = $resourceDefinition.Parameters | Where-Object -FilterScript { $_.Option -eq 'Key' }
+    $resourceKeys = $resourceDefinition.Parameters | Where-Object -Property Option -EQ 'Key'
 
     $keyStrings = @()
     foreach ($resourceKey in $resourceKeys)
@@ -531,11 +676,14 @@ function Test-M365DSCTargetResource
 }
 
 <#
+.SYNOPSIS
+    Stores the DSC resource dictionary in module scope.
+
 .DESCRIPTION
-    Sets the script scoped variable that holds all the M365DSC resources.
+    Sets the cached dictionary of resource metadata used by other helper functions.
 
 .PARAMETER DscResourceDictionary
-    A dictionary containing all the M365DSC resources.
+    Specifies the resource dictionary to cache.
 
 .FUNCTIONALITY
     Internal
@@ -552,8 +700,11 @@ function Set-M365DSCAllResourcesDictionary
 }
 
 <#
+.SYNOPSIS
+    Returns the cached DSC resource dictionary.
+
 .DESCRIPTION
-    Retrieves the script scoped variable that holds all the M365DSC resources.
+    Returns the module-scoped dictionary containing loaded Microsoft365DSC resource metadata.
 
 .FUNCTIONALITY
     Internal
@@ -567,8 +718,11 @@ function Get-M365DSCAllResourcesDictionary
 }
 
 <#
+.SYNOPSIS
+    Initializes the cached DSC resource dictionary.
+
 .DESCRIPTION
-    Initializes the script scoped variable that holds all the M365DSC resources.
+    Loads Microsoft365DSC resource metadata into a module-scoped dictionary when not already initialized.
 
 .FUNCTIONALITY
     Internal
@@ -590,14 +744,17 @@ function Initialize-M365DSCAllResourcesDictionary
 }
 
 <#
+.SYNOPSIS
+    Warns when the current code page is not UTF-8.
+
 .DESCRIPTION
-This function tests the code page of the current terminal session.
+    Checks the active code page and emits guidance when UTF-8 is not configured, because non-UTF8 sessions can cause Unicode issues in exported content.
 
 .EXAMPLE
-Test-CodePage
+    PS> Test-CodePage
 
 .FUNCTIONALITY
-Private
+    Private
 #>
 function Test-CodePage
 {
@@ -612,11 +769,14 @@ function Test-CodePage
 }
 
 <#
+.SYNOPSIS
+    Installs the Microsoft365DSC Dev branch package.
+
 .DESCRIPTION
-    This function downloads and installs the Dev branch of Microsoft365DSC on the local machine
+    Downloads the Dev branch archive from GitHub, installs required dependencies, and updates the local Microsoft365DSC module files.
 
 .PARAMETER Scope
-    Specifies the scope of the update of the module. The default value is AllUsers (needs to run as elevated user).
+    Specifies the installation scope used for dependency installation.
 
 .EXAMPLE
     Install-M365DSCDevBranch
@@ -650,8 +810,8 @@ function Install-M365DSCDevBranch
         #region Download and Extract Dev branch's ZIP
         Write-Host 'Downloading the Zip package...' -NoNewline
         $url = 'https://github.com/microsoft/Microsoft365DSC/archive/Dev.zip'
-        $output = "$($env:Temp)\dev.zip"
-        $extractPath = $env:Temp + '\O365Dev'
+        $output = "$($env:TEMP)/dev.zip"
+        $extractPath = "$($env:TEMP)/O365Dev"
         Write-Host 'Done' -ForegroundColor Green
 
         Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
@@ -662,23 +822,21 @@ function Install-M365DSCDevBranch
         #region Install All Dependencies
         $manifest = Import-PowerShellDataFile "$extractPath\Microsoft365DSC-Dev\Modules\Microsoft365DSC\Microsoft365DSC.psd1"
         $dependencies = $manifest.RequiredModules
-        if ((-not(([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) -and ($Scope -eq 'AllUsers'))
+        if (($PSEdition -eq 'Desktop' -or $IsWindows) -and (-not(([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) -and ($Scope -eq 'AllUsers'))
         {
-            Write-Error 'Cannot update the dependencies for Microsoft365DSC. You need to run this command as a local administrator.'
+            throw 'Cannot update the dependencies for Microsoft365DSC. You need to run this command as a local administrator.'
         }
-        else
+
+        foreach ($dependency in $dependencies)
         {
-            foreach ($dependency in $dependencies)
+            Write-Host "Installing {$($dependency.ModuleName)}..." -NoNewline
+            $existingModule = Get-Module $dependency.ModuleName -ListAvailable | Where-Object -Property Version -EQ $dependency.RequiredVersion
+            if ($null -eq $existingModule)
             {
-                Write-Host "Installing {$($dependency.ModuleName)}..." -NoNewline
-                $existingModule = Get-Module $dependency.ModuleName -ListAvailable | Where-Object -FilterScript { $_.Version -eq $dependency.RequiredVersion }
-                if ($null -eq $existingModule)
-                {
-                    Install-Module $dependency.ModuleName -RequiredVersion $dependency.RequiredVersion -Force -AllowClobber -Scope $Scope | Out-Null
-                }
-                Import-Module $dependency.ModuleName -Force | Out-Null
-                Write-Host 'Done' -ForegroundColor Green
+                Install-Module $dependency.ModuleName -RequiredVersion $dependency.RequiredVersion -Force -AllowClobber -Scope $Scope | Out-Null
             }
+            Import-Module $dependency.ModuleName -Force | Out-Null
+            Write-Host 'Done' -ForegroundColor Green
         }
         #endregion
 
@@ -691,7 +849,7 @@ function Install-M365DSCDevBranch
             -Destination $defaultPath -Recurse -Force
 
         Import-Module ($defaultPath + 'Microsoft365DSC.psd1') -Force | Out-Null
-        $oldModule = Get-Module 'Microsoft365DSC' | Where-Object -FilterScript { $_.ModuleBase -eq $currentVersionPath }
+        $oldModule = Get-Module 'Microsoft365DSC' | Where-Object -Property ModuleBase -EQ $currentVersionPath
         Remove-Module $oldModule -Force | Out-Null
         if (Test-Path $currentVersionPath)
         {
@@ -718,11 +876,38 @@ function Install-M365DSCDevBranch
 }
 
 <#
-.Description
-This function downloads all apps installed in SPO
+.SYNOPSIS
+    Retrieves package files from the SharePoint tenant app catalog.
 
-.Functionality
-Internal
+.DESCRIPTION
+    Connects to SharePoint Online, enumerates app catalog package files, and returns package metadata used by export and validation routines.
+
+.PARAMETER Credential
+    Specifies delegated credentials used for SharePoint connection.
+
+.PARAMETER ApplicationId
+    Specifies the application id used for app-based authentication.
+
+.PARAMETER TenantId
+    Specifies the tenant id or tenant domain used for authentication.
+
+.PARAMETER CertificatePath
+    Specifies the certificate path used for app-based authentication.
+
+.PARAMETER CertificatePassword
+    Specifies the certificate password used for app-based authentication.
+
+.PARAMETER CertificateThumbprint
+    Specifies the certificate thumbprint used for app-based authentication.
+
+.PARAMETER ManagedIdentity
+    Indicates that managed identity authentication should be used.
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    System.Collections.Hashtable[]
 #>
 function Get-AllSPOPackages
 {
@@ -811,11 +996,20 @@ function Get-AllSPOPackages
 }
 
 <#
-.Description
-This function removes all items that have a Null value from the provided hashtable
+.SYNOPSIS
+    Removes null or empty values from a hashtable.
 
-.Functionality
-Internal
+.DESCRIPTION
+    Scans a hashtable and removes keys whose values are null or empty strings.
+
+.PARAMETER Hash
+    Specifies the hashtable to clean.
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    System.Collections.Hashtable
 #>
 function Remove-NullEntriesFromHashtable
 {
@@ -846,65 +1040,93 @@ function Remove-NullEntriesFromHashtable
 }
 
 <#
-.Description
-This function compares a created export with the specified M365DSC Blueprint
+.SYNOPSIS
+    Compares a tenant export against a blueprint configuration.
 
-.Parameter BluePrintUrl
-Specifies the url to the blueprint to which the tenant should be compared.
+.DESCRIPTION
+    Downloads or opens a blueprint file, exports matching tenant resources, and generates a delta report showing drift between blueprint and tenant state.
 
-.Parameter OutputReportPath
-Specifies the path of the report that will be created.
+.PARAMETER BluePrintUrl
+    Specifies the blueprint URL or local path.
 
-.Parameter Credentials
-Specifies the credentials that will be used for authentication.
+.PARAMETER OutputReportPath
+    Specifies the output path of the generated report.
 
-.Parameter ApplicationId
-Specifies the application id to be used for authentication.
+.PARAMETER Credentials
+    Specifies delegated credentials used for authentication.
 
-.Parameter ApplicationSecret
-Specifies the application secret of the application to be used for authentication.
+.PARAMETER ApplicationId
+    Specifies the application id used for app-based authentication.
 
-.Parameter TenantId
-Specifies the id of the tenant.
+.PARAMETER TenantId
+    Specifies the tenant id or tenant domain used for authentication.
 
-.Parameter CertificateThumbprint
-Specifies the thumbprint to be used for authentication.
+.PARAMETER ApplicationSecret
+    Specifies the application secret used for app-based authentication.
 
-.Parameter CertificatePassword
-Specifies the password of the PFX file which is used for authentication.
+.PARAMETER CertificatePath
+    Specifies the certificate path used for app-based authentication.
 
-.Parameter CertificatePath
-Specifies the path of the PFX file which is used for authentication.
+.PARAMETER CertificatePassword
+    Specifies the certificate password used for app-based authentication.
 
-.Parameter HeaderFilePath
-Specifies that file that contains a custom header for the report.
+.PARAMETER CertificateThumbprint
+    Specifies the certificate thumbprint used for app-based authentication.
 
-.Parameter ExcludedProperties
-Specifies the name of parameters that should not be assessed as part of the report. The names speficied will apply to all resources where they are encountered.
+.PARAMETER ManagedIdentity
+    Indicates that managed identity authentication should be used.
 
-.Parameter ExcludedResources
-Specifies the name of resources that should not be assessed as part of the report.
+.PARAMETER AccessTokens
+    Specifies access tokens used for authentication.
 
-.Parameter DriftOnly
-Specifies if the report should only show properties drifts and not missing instances.
+.PARAMETER HeaderFilePath
+    Specifies a custom report header file path.
 
-.Parameter KeepExport
-Specifies if the export created to compare with the blueprint should be kept after the report is generated. By default, the export will be removed after the report is generated.
+.PARAMETER Type
+    Specifies the delta report output type.
 
-.Example
-Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html'
+.PARAMETER ExcludedProperties
+    Specifies property names to exclude from comparison.
 
-.Example
-Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html' -Credentials $credentials -HeaderFilePath 'C:\DSC\ReportCustomHeader.html'
+.PARAMETER ExcludedResources
+    Specifies resource names to exclude from comparison.
 
-.Example
-Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html' -ApplicationId $clientid -TenantId $tenantId -CertificateThumbprint $certthumbprint -HeaderFilePath 'C:\DSC\ReportCustomHeader.html'
+.PARAMETER DriftOnly
+    Indicates that only drifts should be included in the report.
 
-.Example
-Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html' -KeepExport $true
+.PARAMETER KeepExport
+    Indicates that the temporary export should be retained.
 
-.Functionality
-Public
+.PARAMETER UseVariableSubstitution
+    Indicates that variable substitution should be applied during comparison.
+
+.PARAMETER SourceConfigurationDataPath
+    Specifies source configuration data for variable substitution.
+
+.PARAMETER DestinationConfigurationDataPath
+    Specifies destination configuration data for variable substitution.
+
+.PARAMETER ExcludedSubstitutionProperties
+    Specifies properties excluded from substitution.
+
+.PARAMETER Parallel
+    Indicates that export should run in parallel.
+
+.EXAMPLE
+    PS> Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html'
+
+.EXAMPLE
+    PS> Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html' -Credentials $credentials -HeaderFilePath 'C:\DSC\ReportCustomHeader.html'
+
+.EXAMPLE
+    PS> Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html' -ApplicationId $clientid -TenantId $tenantId -CertificateThumbprint $certthumbprint -HeaderFilePath 'C:\DSC\ReportCustomHeader.html'
+
+.EXAMPLE
+    PS> Assert-M365DSCBlueprint -BluePrintUrl 'C:\DS\blueprint.m365' -OutputReportPath 'C:\DSC\BlueprintReport.html' -KeepExport $true
+
+.FUNCTIONALITY
+    Public
+
 #>
 function Assert-M365DSCBlueprint
 {
@@ -932,6 +1154,10 @@ function Assert-M365DSCBlueprint
         $TenantId,
 
         [Parameter()]
+        [System.Management.Automation.PSCredential]
+        $ApplicationSecret,
+
+        [Parameter()]
         [System.String]
         $CertificatePath,
 
@@ -942,6 +1168,14 @@ function Assert-M365DSCBlueprint
         [Parameter()]
         [System.String]
         $CertificateThumbprint,
+
+        [Parameter()]
+        [Switch]
+        $ManagedIdentity,
+
+        [Parameter()]
+        [System.String[]]
+        $AccessTokens,
 
         [Parameter()]
         [System.String]
@@ -982,21 +1216,25 @@ function Assert-M365DSCBlueprint
 
         [Parameter()]
         [System.String[]]
-        $ExcludedSubstitutionProperties
+        $ExcludedSubstitutionProperties,
+
+        [Parameter()]
+        [Switch]
+        $Parallel
     )
 
     #Ensure the proper dependencies are installed in the current environment.
     Confirm-M365DSCDependencies
 
     #region Telemetry
-    $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+    $data = [System.Collections.Generic.Dictionary[[System.String], [System.Object]]]::new()
     $data.Add('Event', 'AssertBlueprint')
     $data.Add('BluePrint', $BluePrintUrl)
     Add-M365DSCTelemetryEvent -Data $data
     #endregion
 
     $TempBluePrintName = 'TempBlueprint_' + (New-Guid).ToString() + '.M365'
-    $LocalBluePrintPath = Join-Path -Path $env:Temp -ChildPath $TempBluePrintName
+    $LocalBluePrintPath = Join-Path -Path $env:TEMP -ChildPath $TempBluePrintName
     try
     {
         # Download the BluePrint locally in a temp location
@@ -1070,19 +1308,22 @@ function Assert-M365DSCBlueprint
         Write-Host "Initiating the Export of those ($($ResourcesInBluePrint.Length)) components from the tenant..."
         $TempExportName = 'TempExport_' + (New-Guid).ToString() + '.ps1'
         Export-M365DSCConfiguration -Components $ResourcesInBluePrint `
-            -Path $env:temp `
+            -Path $env:TEMP `
             -FileName $TempExportName `
+            -Parallel:$Parallel.IsPresent `
             -Credential $Credentials `
             -ApplicationId $ApplicationId `
             -ApplicationSecret $ApplicationSecret `
             -TenantId $TenantId `
             -CertificateThumbprint $CertificateThumbprint `
             -CertificatePath $CertificatePath `
-            -CertificatePassword $CertificatePassword
+            -CertificatePassword $CertificatePassword `
+            -ManagedIdentity:$ManagedIdentity.IsPresent `
+            -AccessTokens $AccessTokens
 
         # Call the New-M365DSCDeltaReport configuration to generate the Delta Report between
         # the BluePrint and the extracted resources;
-        $ExportPath = Join-Path -Path $env:Temp -ChildPath $TempExportName
+        $ExportPath = Join-Path -Path $env:TEMP -ChildPath $TempExportName
         $deltaReportParams = @{
             Source                = $ExportPath
             Destination           = $LocalBluePrintPath
@@ -1128,14 +1369,17 @@ function Assert-M365DSCBlueprint
 }
 
 <#
-.Description
-This function gets all available M365DSC resources in the module
+.SYNOPSIS
+    Returns all Microsoft365DSC resource names in the module.
 
-.Example
-Get-M365DSCAllResources
+.DESCRIPTION
+    Enumerates resource module files and returns resource names without MSFT_ prefix.
 
-.Functionality
-Public
+.FUNCTIONALITY
+    Public
+
+.OUTPUTS
+    System.String[]
 #>
 function Get-M365DSCAllResources
 {
@@ -1144,31 +1388,60 @@ function Get-M365DSCAllResources
     [CmdletBinding()]
     param ()
 
-    $allResources = Get-ChildItem -Path ($PSScriptRoot + '/../DSCResources/') -Recurse -Filter '*.psm1'
-    $result = @()
-    foreach ($resource in $allResources)
+    if ($null -eq $Script:allResourcesPath)
     {
-        $result += $resource.Name -replace 'MSFT_', '' -replace '.psm1', ''
+        $Script:allResourcesPath = Get-M365DSCAllResourcesPath
     }
 
-    return $result
+    return $Script:allResourcesPath.Name -replace 'MSFT_', '' -replace '.psm1', ''
 }
 
 <#
+.SYNOPSIS
+    Returns the Microsoft365DSC DSC resource module files from the DscResources folder.
+
 .DESCRIPTION
-    This function compares two installed versions of Microsoft365DSC and returns resources that were added or removed in the newer version.
+    Enumerates the Microsoft365DSC DscResources directory and returns the PowerShell module files for all DSC resources.
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    System.IO.FileInfo[]
+
+.NOTES
+    This helper is used by Get-M365DSCAllResources to discover available resources.
+#>
+function Get-M365DSCAllResourcesPath
+{
+    [CmdletBinding()]
+    [OutputType([System.IO.FileInfo[]])]
+    [CmdletBinding()]
+    param ()
+
+    $Script:allResourcesPath = Get-ChildItem -Path ($PSScriptRoot + '/../DscResources/') -Recurse -Filter '*.psm1' -File
+
+    return $Script:allResourcesPath
+}
+
+<#
+.SYNOPSIS
+    Compares resources between two installed Microsoft365DSC versions.
+
+.DESCRIPTION
+    Resolves two installed module versions and returns added and removed resource names by comparing their DscResources folders.
 
 .PARAMETER PreviousVersion
-    Specifies the previous (older) module version to compare against.
+    Specifies the older Microsoft365DSC version to compare.
 
 .PARAMETER CurrentVersion
-    Specifies the current (newer) module version. If not specified, defaults to the latest installed version.
+    Specifies the newer Microsoft365DSC version to compare. When omitted, the latest installed version is used.
 
 .EXAMPLE
-    Get-M365DSCNewResources -PreviousVersion '1.24.501.1' -CurrentVersion '1.24.515.1'
+    PS> Get-M365DSCNewResources -PreviousVersion '1.24.501.1' -CurrentVersion '1.24.515.1'
 
 .EXAMPLE
-    Get-M365DSCNewResources -PreviousVersion '1.24.501.1'
+    PS> Get-M365DSCNewResources -PreviousVersion '1.24.501.1'
 
 .OUTPUTS
     A hashtable with two keys: 'Added' and 'Removed'. Each key contains an array of resource names that were added or removed in the current version compared to the previous version.
@@ -1206,7 +1479,7 @@ function Get-M365DSCResourceDifferences
     }
     else
     {
-        $currentModule = $installedModules | Where-Object -FilterScript { $_.Version -eq $CurrentVersion }
+        $currentModule = $installedModules | Where-Object -Property Version -EQ $CurrentVersion
     }
 
     if ($null -eq $currentModule)
@@ -1215,20 +1488,20 @@ function Get-M365DSCResourceDifferences
     }
 
     # Resolve previous version
-    $previousModule = $installedModules | Where-Object -FilterScript { $_.Version -eq $PreviousVersion }
+    $previousModule = $installedModules | Where-Object -Property Version -EQ $PreviousVersion
     if ($null -eq $previousModule)
     {
         throw "Microsoft365DSC version '$PreviousVersion' is not installed."
     }
 
-    # Get resources from each version by scanning their DSCResources folders
-    $currentResourcesPath = Join-Path -Path $currentModule.ModuleBase -ChildPath 'DSCResources'
-    $previousResourcesPath = Join-Path -Path $previousModule.ModuleBase -ChildPath 'DSCResources'
+    # Get resources from each version by scanning their DscResources folders
+    $currentResourcesPath = Join-Path -Path $currentModule.ModuleBase -ChildPath 'DscResources'
+    $previousResourcesPath = Join-Path -Path $previousModule.ModuleBase -ChildPath 'DscResources'
 
-    $currentResources = Get-ChildItem -Path $currentResourcesPath -Recurse -Filter '*.psm1' |
+    $currentResources = Get-ChildItem -Path $currentResourcesPath -Recurse -Filter '*.psm1' -File |
         ForEach-Object { $_.Name -replace 'MSFT_', '' -replace '\.psm1', '' }
 
-    $previousResources = Get-ChildItem -Path $previousResourcesPath -Recurse -Filter '*.psm1' |
+    $previousResources = Get-ChildItem -Path $previousResourcesPath -Recurse -Filter '*.psm1' -File |
         ForEach-Object { $_.Name -replace 'MSFT_', '' -replace '\.psm1', '' }
 
     # Return resources present in current but not in previous
@@ -1273,21 +1546,26 @@ function Test-M365DSCObjectHasProperty
 }
 
 <#
-.Description
-    This function returns the workload to which the specified DSC resources belongs.
+.SYNOPSIS
+    Derives workload names from resource names.
 
-.Parameter ResourceName
-    Specifies the resources for which the workloads should be determined.
-    Either a single string or an array of strings.
+.DESCRIPTION
+    Maps resource name prefixes to known workload identifiers and returns distinct workload values.
 
-.Example
-    Get-M365DSCWorkloadForResource -ResourceName AADUser
+.PARAMETER ResourceName
+    Specifies resource names to map to workloads.
 
 .EXAMPLE
-    Get-M365DSCWorkloadForResource -ResourceName @('AADUser', 'AADGroup')
+    PS> Get-M365DSCWorkloadForResource -ResourceName AADUser
 
-.Functionality
-Internal
+.EXAMPLE
+    PS> Get-M365DSCWorkloadForResource -ResourceName @('AADUser', 'AADGroup')
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    System.String[]
 #>
 function Get-M365DSCWorkloadForResource
 {
@@ -1320,12 +1598,14 @@ function Get-M365DSCWorkloadForResource
 }
 
 <#
-.Description
-This function creates Markdown documentation of all public M365DSC cmdlets
-and places these in the correct location of the docs folder.
+.SYNOPSIS
+    Generates Markdown documentation for public Microsoft365DSC cmdlets.
 
-.Functionality
-Internal
+.DESCRIPTION
+    Reads module help and command metadata, then creates per-cmdlet Markdown files in the docs cmdlets folder.
+
+.FUNCTIONALITY
+    Internal
 #>
 function New-M365DSCCmdletDocumentation
 {
@@ -1405,7 +1685,7 @@ function New-M365DSCCmdletDocumentation
                 {
                     $paramName = $parameter.Name.VariablePath.UserPath
 
-                    $paramHelp = $helpInfo.parameters.parameter | Where-Object { $_.Name -eq $paramName }
+                    $paramHelp = $helpInfo.parameters.parameter | Where-Object -Property Name -EQ $paramName
                     $description = ''
                     if ($paramHelp.description.Count -gt 0)
                     {
@@ -1561,14 +1841,14 @@ $resourceExample
 }
 
 <#
-.Description
-This function creates an example from the resource schema, using ReverseDSC code.
+.SYNOPSIS
+    Creates missing resource examples and removes stale example folders.
 
-.Parameter ResourceName
-Specifies the resource name for which the example should be generated.
+.DESCRIPTION
+    Compares available resources and existing example folders, generates missing examples, and removes examples for resources that no longer exist.
 
-.Functionality
-Internal
+.FUNCTIONALITY
+    Internal
 #>
 function New-M365DSCMissingResourcesExample
 {
@@ -1576,7 +1856,7 @@ function New-M365DSCMissingResourcesExample
 
     $m365Resources = Get-DscResourceV2 -Module 'Microsoft365DSC' | Select-Object -ExpandProperty Name
     $examplesPath = Join-Path $location -ChildPath '../../../Examples/Resources'
-    $examples = Get-ChildItem -Path $examplesPath | Where-Object { $_.PsIsContainer } | Select-Object -ExpandProperty Name
+    $examples = Get-ChildItem -Path $examplesPath | Where-Object -Property PsIsContainer -EQ $true | Select-Object -ExpandProperty Name
 
     [array]$differences = Compare-Object -ReferenceObject $m365Resources -DifferenceObject $examples
 
@@ -1607,11 +1887,20 @@ function New-M365DSCMissingResourcesExample
 }
 
 <#
-.Description
-This function removes the authentication parameters from the hashtable.
+.SYNOPSIS
+    Removes authentication parameters from a bound parameter hashtable.
 
-.Functionality
-Internal
+.DESCRIPTION
+    Removes common authentication and runtime keys from a hashtable before comparison or serialization.
+
+.PARAMETER BoundParameters
+    Specifies the hashtable to sanitize.
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    System.Collections.Hashtable
 #>
 function Remove-M365DSCAuthenticationParameter
 {
@@ -1649,14 +1938,69 @@ function Remove-M365DSCAuthenticationParameter
 }
 
 <#
-.Description
-This function analyzes an M365DSC configuration file and returns information about potential issues (e.g., duplicate primary keys).
+.SYNOPSIS
+    Masks sensitive authentication values in a hashtable.
 
-.Example
-Get-M365DSCConfigurationConflict -ConfigurationContent "content"
+.DESCRIPTION
+    Replaces sensitive authentication-related property values with placeholder text for safe logging and reporting.
 
-.Functionality
-Public
+.PARAMETER BoundParameters
+    Specifies the hashtable whose sensitive values should be masked.
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    System.Collections.Hashtable
+#>
+function Set-M365DSCAuthenticationParameterMask
+{
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Collections.Hashtable]
+        $BoundParameters
+    )
+
+    $keysToReplace = @(
+        'ApplicationSecret',
+        'Credential',
+        'CertificatePassword',
+        'CertificatePath',
+        'CertificateThumbprint',
+        'Password'
+    )
+
+    foreach ($key in $keysToReplace)
+    {
+        if ($BoundParameters.ContainsKey($key))
+        {
+            $BoundParameters[$key] = '***'
+        }
+    }
+
+    return $BoundParameters
+}
+
+<#
+.SYNOPSIS
+    Detects duplicate primary-key resource instances in configuration content.
+
+.DESCRIPTION
+    Parses configuration content, computes each resource primary identity, and returns conflicts where duplicate primary keys are found.
+
+.PARAMETER ConfigurationContent
+    Specifies DSC configuration content to analyze.
+
+.EXAMPLE
+    PS> Get-M365DSCConfigurationConflict -ConfigurationContent "content"
+
+.FUNCTIONALITY
+    Public
+
+.OUTPUTS
+    Array
 #>
 function Get-M365DSCConfigurationConflict
 {
@@ -1677,8 +2021,8 @@ function Get-M365DSCConfigurationConflict
     $resourcesInModule = Get-DscResourceV2 -Module 'Microsoft365DSC'
     foreach ($component in $parsedContent)
     {
-        $resourceDefinition = $resourcesInModule | Where-Object -FilterScript { $_.Name -eq $component.ResourceName }
-        [Array]$mandatoryProperties = $resourceDefinition.Properties | Where-Object -FilterScript { $_.IsMandatory }
+        $resourceDefinition = $resourcesInModule | Where-Object -Property Name -EQ $component.ResourceName
+        [Array]$mandatoryProperties = $resourceDefinition.Properties | Where-Object -Property IsMandatory -EQ $true
         $primaryKeyValues = ''
         foreach ($mandatoryKey in $mandatoryProperties.Name)
         {
@@ -1710,20 +2054,23 @@ function Get-M365DSCConfigurationConflict
 }
 
 <#
+.SYNOPSIS
+    Invokes a DSC resource function in a PowerShell 7 session.
+
 .DESCRIPTION
-    Invokes a script-based DSC resource from a Windows PowerShell 5.1 session into a PowerShell Core session.
+    Ensures a PowerShell Core remoting session exists, imports the target resource module, and invokes the selected resource function with provided parameters.
 
 .PARAMETER Path
-    The path to the module containing the resource.
+    Specifies the resource module path to import in the Core session.
 
 .PARAMETER FunctionName
-    The name of the function to invoke.
+    Specifies the target resource function to invoke.
 
 .PARAMETER Parameters
-    The parameters to pass to the function.
+    Specifies parameters passed to the invoked function.
 
 .EXAMPLE
-    Invoke-PowerShellCoreResource -Path 'C:\Program Files\...\DSCResources\MSFT_Resource\MSFT_Resource.psm1' -FunctionName Test-TargetResource -Parameters @{ Name = 'Value' }
+    Invoke-PowerShellCoreResource -Path 'C:\Program Files\...\DscResources\MSFT_Resource\MSFT_Resource.psm1' -FunctionName Test-TargetResource -Parameters @{ Name = 'Value' }
 
 .EXAMPLE
     # From inside of a DSC resource
@@ -1792,8 +2139,11 @@ function Initialize-PowerShellCoreSession
 }
 
 <#
+.SYNOPSIS
+    Clears deferred host message cache entries.
+
 .DESCRIPTION
-    This function clears the cached messages stored for deferred writing.
+    Resets the in-memory message cache used by Write-M365DSCHost deferred writes.
 
 .FUNCTIONALITY
     Internal
@@ -1804,24 +2154,30 @@ function Clear-M365DSCHostMessageCache
 }
 
 <#
-.Description
-This function writes messages to the console or verbose output.
+.SYNOPSIS
+    Writes Microsoft365DSC host output with optional deferred batching.
+
+.DESCRIPTION
+    Writes messages to host output in interactive sessions and to verbose output in non-interactive sessions.
+    Supports deferred message accumulation and explicit commit behavior.
 
 .PARAMETER Message
-Specifies the message to write.
+    Specifies the message text to write.
+
+.PARAMETER ForegroundColor
+    Specifies the foreground color for interactive host output.
 
 .PARAMETER DeferWrite
-Specifies if writing the message should be deferred. Adheres to -NoNewLine behavior of Write-Host.
+    Indicates that the message should be queued instead of written immediately.
 
 .PARAMETER CommitWrite
-Specifies if cached messages of -DeferWrite should be combined and written.
-Combining of the messages is done by joining them without any characters between.
+    Indicates that queued deferred messages should be flushed before writing the current message.
 
 .EXAMPLE
-Write-M365DSCHost -Message "This is a message."
+    PS> Write-M365DSCHost -Message "This is a message."
 
-.Functionality
-Internal
+.FUNCTIONALITY
+    Internal
 #>
 function Write-M365DSCHost
 {
@@ -1844,6 +2200,11 @@ function Write-M365DSCHost
         [switch]
         $CommitWrite
     )
+
+    if ([int]$ForegroundColor -eq -1)
+    {
+        $ForegroundColor = [System.ConsoleColor]::Gray
+    }
 
     if (-not [System.String]::IsNullOrEmpty($Message))
     {
@@ -1896,8 +2257,11 @@ function Write-M365DSCHost
 }
 
 <#
+.SYNOPSIS
+    Sends Microsoft Graph batch requests with throttling backoff handling.
+
 .DESCRIPTION
-    This function sends a batch request to the Microsoft Graph API.
+    Splits requests into batch payloads, sends them to Graph, detects throttling responses, and retries with reduced batch size when needed.
 
 .PARAMETER Requests
     An array of hashtables representing the requests to be sent in the batch.
@@ -1905,6 +2269,15 @@ function Write-M365DSCHost
     - id: A unique identifier for the request.
     - method: The HTTP method to use (e.g., GET, POST).
     - url: The API endpoint URL.
+
+.PARAMETER AsList
+    Indicates that results should be returned as a generic list.
+
+.PARAMETER ThrottlingDelayInSeconds
+    Specifies delay before retrying throttled batches.
+
+.PARAMETER BatchRequestSize
+    Specifies maximum number of sub-requests per batch call.
 
 .EXAMPLE
     $requests = @(
@@ -1915,6 +2288,9 @@ function Write-M365DSCHost
         }
     )
     Invoke-M365DSCGraphBatchRequest -Requests $requests
+
+.OUTPUTS
+    System.Collections.Hashtable[]
 #>
 function Invoke-M365DSCGraphBatchRequest
 {
@@ -1941,7 +2317,7 @@ function Invoke-M365DSCGraphBatchRequest
 
     $batchResponses = [System.Collections.Generic.List[System.Collections.Hashtable]]::new()
     $halfBatchSize = [Math]::Ceiling($BatchRequestSize / 2)
-    for ($i = 0; $i -lt $Requests.Count; $i += $BatchRequestSize)
+    :outer for ($i = 0; $i -lt $Requests.Count; $i += $BatchRequestSize)
     {
         $batchRequestSized = $Requests[$i..([Math]::Min($i + $BatchRequestSize - 1, $Requests.Count - 1))]
 
@@ -1955,14 +2331,33 @@ function Invoke-M365DSCGraphBatchRequest
             -Body ($request | ConvertTo-Json -Depth 10) `
             -ErrorAction SilentlyContinue
 
-        [array]$throttlingResponse = $apiResponse.responses | Where-Object { $_.status -eq 429 }
-        if ($throttlingResponse.Count -gt 0)
+        :inner foreach ($response in $apiResponse.responses)
         {
-            Write-Warning -Message "Throttling encountered, pausing and repeating request..."
-            Start-Sleep -Seconds $ThrottlingDelayInSeconds
-            $BatchRequestSize = [Math]::Max($halfBatchSize, [Math]::Floor($BatchRequestSize / 2))
-            $i = if ($i -ge $BatchRequestSize) { $i - $BatchRequestSize } else { 0 }
-            continue
+            switch ($response.status)
+            {
+                200 {
+                    if ($null -ne $response.body.'@odata.nextLink')
+                    {
+                        $value = [System.Collections.Generic.List[System.Object]]::new($response.body.value)
+                        $nextLink = $response.body.'@odata.nextLink'
+                        while ($nextLink)
+                        {
+                            Write-Verbose -Message "Fetching next page of results from $nextLink..."
+                            $nextPageResponse = Invoke-MgGraphRequest -Method GET -Uri $nextLink -ErrorAction SilentlyContinue
+                            $value.AddRange($nextPageResponse.value)
+                            $nextLink = $nextPageResponse.'@odata.nextLink'
+                        }
+                        $response.body.value = $value.ToArray()
+                    }
+                }
+                429 {
+                    Write-Warning -Message "Throttling encountered, pausing and repeating request..."
+                    Start-Sleep -Seconds $ThrottlingDelayInSeconds
+                    $BatchRequestSize = [Math]::Max($halfBatchSize, [Math]::Floor($BatchRequestSize / 2))
+                    $i = if ($i -ge $BatchRequestSize) { $i - $BatchRequestSize } else { 0 }
+                    continue outer
+                }
+            }
         }
 
         $batchResponses.AddRange([System.Collections.Hashtable[]]$apiResponse.responses)
@@ -1976,19 +2371,23 @@ function Invoke-M365DSCGraphBatchRequest
 }
 
 <#
-.Description
-    This function retrieves the comparison metadata for a given M365DSC resource.
-    The metadata indicates whether a resource requires custom comparison logic and
-    should expose a Get-CompareParameters function.
+.SYNOPSIS
+    Returns comparison metadata for a resource.
 
-.Parameter ResourceName
-    The name of the M365DSC resource (without MSFT_ prefix).
+.DESCRIPTION
+    Loads and caches comparison metadata from ComparisonMetadata.json and returns metadata for the requested resource.
 
-.Example
+.PARAMETER ResourceName
+    Specifies the resource name to retrieve metadata for.
+
+.EXAMPLE
     PS> Get-M365DSCResourceComparisonMetadata -ResourceName 'AADRoleAssignmentScheduleRequest'
 
-.Functionality
+.FUNCTIONALITY
     Internal
+
+.OUTPUTS
+    System.Collections.Hashtable
 #>
 function Get-M365DSCResourceComparisonMetadata
 {
@@ -2042,19 +2441,23 @@ function Get-M365DSCResourceComparisonMetadata
 }
 
 <#
-.Description
-    This function retrieves the comparison parameters from a resource's Get-CompareParameters function.
-    This is used during drift detection and reporting to ensure that resource-specific comparison logic
-    (such as PostProcessing scripts and ExcludedProperties) is applied consistently.
+.SYNOPSIS
+    Retrieves custom comparison parameters for a resource.
 
-.Parameter ResourceName
-    The name of the M365DSC resource (without MSFT_ prefix).
+.DESCRIPTION
+    Loads the resource module when needed, invokes Get-CompareParameters when available, and caches returned compare parameters.
 
-.Example
+.PARAMETER ResourceName
+    Specifies the resource name to retrieve compare parameters for.
+
+.EXAMPLE
     PS> Get-M365DSCResourceComparisonParameters -ResourceName 'AADRoleAssignmentScheduleRequest'
 
-.Functionality
+.FUNCTIONALITY
     Internal
+
+.OUTPUTS
+    System.Collections.Hashtable
 #>
 function Get-M365DSCResourceComparisonParameters
 {
@@ -2087,7 +2490,7 @@ function Get-M365DSCResourceComparisonParameters
 
         if ($null -eq $module)
         {
-            $resourceModulePath = Join-Path -Path $PSScriptRoot -ChildPath "../DSCResources/$moduleName/$moduleName.psm1"
+            $resourceModulePath = Join-Path -Path $PSScriptRoot -ChildPath "../DscResources/$moduleName/$moduleName.psm1"
             if (Test-Path -Path $resourceModulePath)
             {
                 $previousValue = $moduleConfig.skipModuleDependencyValidation
@@ -2139,6 +2542,19 @@ function Get-M365DSCResourceComparisonParameters
     return $compareParameters
 }
 
+<#
+.SYNOPSIS
+    Resolves a group display name from its group id.
+
+.DESCRIPTION
+    Queries Microsoft Graph for a group by id and returns its display name.
+
+.PARAMETER GroupId
+    Specifies the group id to resolve.
+
+.OUTPUTS
+    System.String
+#>
 function Get-M365DSCGroupDisplayNameById
 {
     [CmdletBinding()]
@@ -2166,6 +2582,19 @@ function Get-M365DSCGroupDisplayNameById
     }
 }
 
+<#
+.SYNOPSIS
+    Resolves a group id from its display name.
+
+.DESCRIPTION
+    Queries Microsoft Graph for a group by display name and returns its id.
+
+.PARAMETER GroupDisplayName
+    Specifies the group display name to resolve.
+
+.OUTPUTS
+    System.String
+#>
 function Get-M365DSCGroupIdByDisplayName
 {
     [CmdletBinding()]
@@ -2193,6 +2622,19 @@ function Get-M365DSCGroupIdByDisplayName
     }
 }
 
+<#
+.SYNOPSIS
+    Resolves a user principal name from user id.
+
+.DESCRIPTION
+    Queries Microsoft Graph for a user by id and returns UserPrincipalName.
+
+.PARAMETER UserId
+    Specifies the user id to resolve.
+
+.OUTPUTS
+    System.String
+#>
 function Get-M365DSCUserPrincipalNameById
 {
     [CmdletBinding()]
@@ -2220,6 +2662,19 @@ function Get-M365DSCUserPrincipalNameById
     }
 }
 
+<#
+.SYNOPSIS
+    Resolves a user id from user principal name.
+
+.DESCRIPTION
+    Queries Microsoft Graph for a user by principal name and returns the user id.
+
+.PARAMETER UserPrincipalName
+    Specifies the user principal name to resolve.
+
+.OUTPUTS
+    System.String
+#>
 function Get-M365DSCUserIdByPrincipalName
 {
     [CmdletBinding()]
@@ -2247,6 +2702,16 @@ function Get-M365DSCUserIdByPrincipalName
     }
 }
 
+<#
+.SYNOPSIS
+    Rewrites authentication target identities to directory object ids.
+
+.DESCRIPTION
+    Updates target entries by resolving group display names and user principal names to their corresponding directory object ids.
+
+.PARAMETER Targets
+    Specifies authentication target objects to normalize.
+#>
 function Update-M365DSCAuthenticationTargets
 {
     [CmdletBinding()]
@@ -2294,6 +2759,56 @@ function Update-M365DSCAuthenticationTargets
     }
 }
 
+<#
+.SYNOPSIS
+    Sends a push notification using configured global endpoint settings.
+
+.DESCRIPTION
+    Sends a POST request to the configured push notification endpoint with optional global body and header overrides.
+
+.PARAMETER Body
+    Specifies the request body sent to the endpoint.
+
+.EXAMPLE
+    PS> Send-M365DSCPushNotification -Body "This is a test"
+
+.FUNCTIONALITY
+    Internal
+
+.OUTPUTS
+    $null
+#>
+function Send-M365DSCPushNotification
+{
+    [CmdletBinding()]
+    [OutputType($null)]
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $Body
+    )
+
+    if (-not [System.String]::IsNullOrEmpty($Global:M365DSCPushNotificationsURI))
+    {
+        if (-not [System.String]::IsNullOrEmpty($Global:M365DSCPushNotificationsBody))
+        {
+            $Body = $Global:M365DSCPushNotificationsBody
+        }
+        $postRequest = @{
+            Method      = "Post"
+            URI         = $Global:M365DSCPushNotificationsURI
+            Body        = $Body
+            ErrorAction = "SilentlyContinue"
+        }
+        if (-not [System.String]::IsNullOrEmpty($Global:M365DSCPushNotificationsHeaders))
+        {
+            $postRequest.Add("Headers", $Global:M365DSCPushNotificationsHeaders)
+        }
+        $null = Invoke-RestMethod @postRequest
+    }
+}
+
 Export-ModuleMember -Function @(
     'Assert-M365DSCBlueprint',
     'Clear-M365DSCHostMessageCache',
@@ -2301,6 +2816,7 @@ Export-ModuleMember -Function @(
     'Convert-M365DscHashtableToString',
     'Get-AllSPOPackages',
     'Get-M365DSCAllResources',
+    'Get-M365DSCAllResourcesPath',
     'Get-M365DSCAllResourcesDictionary',
     'Get-M365DSCArrayFromProperty',
     'Get-M365DSCAuthenticationMode',
@@ -2323,6 +2839,8 @@ Export-ModuleMember -Function @(
     'New-M365DSCMissingResourcesExample',
     'Remove-M365DSCAuthenticationParameter',
     'Remove-NullEntriesFromHashtable',
+    'Set-M365DSCAuthenticationParameterMask',
+    'Send-M365DSCPushNotification',
     'Set-M365DSCAllResourcesDictionary',
     'Test-CodePage',
     'Test-M365DSCParameterState',

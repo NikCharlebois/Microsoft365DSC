@@ -658,7 +658,7 @@ function Get-Base64EncodedImage
     )
 
     $IconPath = Join-Path -Path $PSScriptRoot `
-        -ChildPath "..\dependencies\Images\$($IconName)" `
+        -ChildPath "..\Dependencies\Images\$($IconName)" `
         -Resolve
 
     if (Test-Path -Path $IconPath)
@@ -911,18 +911,21 @@ function New-M365DSCConfigurationToCSV
 }
 
 <#
+.SYNOPSIS
+    Generates a report file from an exported DSC configuration.
+
 .DESCRIPTION
-    This function creates a report from the specified exported configuration,
-    either in HTML or Excel format
+    Parses a DSC configuration file and renders a report in the requested output format.
+    Supports Excel, HTML, JSON, Markdown, and CSV output types.
 
 .PARAMETER Type
-    The type of report that should be created: Excel or HTML.
+    Specifies the report output format.
 
 .PARAMETER ConfigurationPath
-    The path to the exported DSC configuration that the report should be created for.
+    Specifies the source DSC configuration file path.
 
 .PARAMETER OutputPath
-    The output path of the report.
+    Specifies the destination report file path.
 
 .EXAMPLE
     PS> New-M365DSCReportFromConfiguration -Type 'HTML' -ConfigurationPath 'C:\DSC\ConfigName.ps1' -OutputPath 'C:\Dsc\M365Report.html'
@@ -980,14 +983,6 @@ function New-M365DSCReportFromConfiguration
     }
     process # required with DynamicParam
     {
-        # Test if Windows Remoting is enabled, which is needed to run this function.
-        $result = Test-WSMan -ErrorAction SilentlyContinue
-        if ($null -eq $result)
-        {
-            Write-Error -Message 'Windows Remoting is NOT configured yet. Please configure Windows Remoting (by running `Enable-PSRemoting -SkipNetworkProfileCheck`) before running this function.'
-            return
-        }
-
         # Validate that the latest version of the module is installed.
         Test-M365DSCModuleValidity
 
@@ -995,7 +990,7 @@ function New-M365DSCReportFromConfiguration
         Confirm-M365DSCDependencies
 
         #region Telemetry
-        $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+        $data = [System.Collections.Generic.Dictionary[[System.String], [System.Object]]]::new()
         $data.Add('Event', 'Report')
         $data.Add('Type', $Type)
         Add-M365DSCTelemetryEvent -Data $data -Type 'NewReport'
@@ -1041,11 +1036,20 @@ function New-M365DSCReportFromConfiguration
 }
 
 <#
+.SYNOPSIS
+    Determines the preferred key property name for a CIM instance hashtable.
+
 .DESCRIPTION
-    This function gets the key parameter for the specified CIMInstance
+    Inspects known key candidates in priority order and returns the property name used as the instance key.
+
+.PARAMETER CIMInstance
+    Specifies the CIM instance hashtable to inspect.
 
 .FUNCTIONALITY
     Internal
+
+.OUTPUTS
+    System.String
 #>
 function Get-M365DSCCIMInstanceKey
 {
@@ -1257,52 +1261,54 @@ function Get-M365DSCResourceKey
 }
 
 <#
+.SYNOPSIS
+    Creates a delta report between two configuration sources.
+
 .DESCRIPTION
-    This function creates a delta HTML report between two provided exported
-    DSC configurations
+    Compares source and destination configurations, evaluates drifted resources and properties, and renders a report in HTML or JSON format.
+    Optional variable substitution support can be applied during comparison.
 
 .PARAMETER Source
-    The source DSC configuration to compare from.
+    Specifies the source configuration file path.
 
 .PARAMETER Destination
-    The destination DSC configuration to compare with.
+    Specifies the destination configuration file path.
 
 .PARAMETER OutputPath
-    The output path of the delta report.
+    Specifies the destination report file path.
 
 .PARAMETER DriftOnly
-    Specifies that only difference should be in the report.
+    Indicates that only drifted properties should be included.
 
 .PARAMETER IsBlueprintAssessment
-    Specifies that the report is a comparison with a Blueprint.
+    Indicates that report generation is running as a blueprint assessment.
 
 .PARAMETER HeaderFilePath
-    Specifies that file that contains a custom header for the report.
+    Specifies a custom header file path for HTML output.
 
 .PARAMETER Delta
-    An array with difference, already compiled from another source.
-
-.PARAMETER ExcludedProperties
-    Array that contains the list of parameters to exclude.
-
-.PARAMETER ExcludedResources
-    Array that contains the list of resources to exclude.
+    Specifies a precomputed delta structure to render.
 
 .PARAMETER Type
-    The type of report that should be created: HTML or JSON.
+    Specifies the report format.
+
+.PARAMETER ExcludedProperties
+    Specifies property names to exclude from comparison.
+
+.PARAMETER ExcludedResources
+    Specifies resource names to exclude from comparison.
 
 .PARAMETER UseVariableSubstitution
-    Switch that indicates whether variable substitution should be used in the report.
+    Indicates that variable substitution should be applied during comparison.
 
 .PARAMETER SourceConfigurationDataPath
-    The path to the ConfigurationData.psd1 file that belongs to the source configuration, used for variable substitution in the report.
+    Specifies the source configuration data file path used for substitution.
 
 .PARAMETER DestinationConfigurationDataPath
-    The path to the ConfigurationData.psd1 file that belongs to the destination configuration, used for variable substitution in the report.
+    Specifies the destination configuration data file path used for substitution.
 
 .PARAMETER ExcludedSubstitutionProperties
-    Array that contains the list of properties for which variable substitution should be excluded.
-    Authentication properties are always excluded, with additional properties that can be specified through this parameter.
+    Specifies property names excluded from variable substitution.
 
 .EXAMPLE
     PS> New-M365DSCDeltaReport -Source 'C:\DSC\Source.ps1' -Destination 'C:\DSC\Destination.ps1' -OutputPath 'C:\DSC\DeltaReport.html'
@@ -1421,7 +1427,7 @@ function New-M365DSCDeltaReport
     }
 
     #region Telemetry
-    $data = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+    $data = [System.Collections.Generic.Dictionary[[System.String], [System.Object]]]::new()
     $data.Add('Event', 'DeltaReport')
     Add-M365DSCTelemetryEvent -Data $data -Type 'CompareConfigurations'
     #endregion
@@ -1992,9 +1998,9 @@ function New-M365DSCDeltaReport
 
                         if ($drift.ContainsKey('DeltaValue') -and $null -ne $drift.DeltaValue)
                         {
-                            $deltaValues = $drift.DeltaValue.Split("; ")
-                            $destinationValues = $deltaValues | Where-Object { $_ -like "*<=*" } | Foreach-Object { $_.Replace('<= ', '') }
-                            $sourceValues = $deltaValues | Where-Object { $_ -like "*=>*" } | Foreach-Object { $_.Replace('=> ', '') }
+                            [System.String[]]$deltaValues = $drift.DeltaValue.Split("; ")
+                            [System.String[]]$destinationValues = $deltaValues -like "*<=*" | Foreach-Object { $_.Replace('<= ', '') }
+                            [System.String[]]$sourceValues = $deltaValues -like "*=>*" | Foreach-Object { $_.Replace('=> ', '') }
                             [void]$sb.AppendLine('<tr>')
                             [void]$sb.AppendLine("<td class='value-cell'>")
                             if ($sourceValues.Count -gt 0)
