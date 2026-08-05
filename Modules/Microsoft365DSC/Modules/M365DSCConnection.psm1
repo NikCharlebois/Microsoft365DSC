@@ -170,13 +170,20 @@ function New-M365DSCConnection
     }
 
     # Convert ApplicationSecret from SecureString to plain string.
-    if ($InboundParameters.ApplicationSecret)
+    if (-not [System.String]::IsNullOrEmpty($InboundParameters.ApplicationSecret))
     {
-        $InboundParameters.ApplicationSecret = $InboundParameters.ApplicationSecret.GetNetworkCredential().Password
+        if ($InboundParameters.ApplicationSecret -is [System.Management.Automation.PSCredential])
+        {
+            $InboundParameters.ApplicationSecret = $InboundParameters.ApplicationSecret.Password
+        }
+        elseif ($InboundParameters.ApplicationSecret -is [System.String])
+        {
+            $InboundParameters.ApplicationSecret = ConvertTo-SecureString $InboundParameters.ApplicationSecret -AsPlainText -Force
+        }
     }
 
     #region Validation
-    if ($null -ne $InboundParameters.Credential -and `
+    if (-not [System.String]::IsNullOrEmpty($InboundParameters.Credential) -and `
             -not [System.String]::IsNullOrEmpty($InboundParameters.CertificateThumbprint))
     {
         $message = 'Both Authentication methods are attempted'
@@ -188,12 +195,12 @@ function New-M365DSCConnection
         throw $errorText
     }
 
-    if ($null -eq $InboundParameters.Credential -and `
+    if ([System.String]::IsNullOrEmpty($InboundParameters.Credential) -and `
             [System.String]::IsNullOrEmpty($InboundParameters.ApplicationId) -and `
             [System.String]::IsNullOrEmpty($InboundParameters.TenantId) -and `
             [System.String]::IsNullOrEmpty($InboundParameters.CertificateThumbprint) -and `
             -not $InboundParameters.ManagedIdentity -and `
-            $null -eq $InboundParameters.AccessTokens)
+            [System.String]::IsNullOrEmpty($InboundParameters.AccessTokens))
     {
         $message = 'No Authentication method was provided'
         Write-Verbose -Message $message
@@ -307,6 +314,11 @@ function New-M365DSCConnection
         -not $Script:M365DSCTelemetryConnectionToGraphParams.ContainsKey('Identity'))
     {
         $Script:M365DSCTelemetryConnectionToGraphParams.Add('Identity', $true)
+    }
+    if ($ConnectionMode -eq 'ServicePrincipalWithSecret' -and
+        -not $Script:M365DSCTelemetryConnectionToGraphParams.ContainsKey('ApplicationSecret'))
+    {
+        $Script:M365DSCTelemetryConnectionToGraphParams.Add('ApplicationSecret', $InboundParameters.ApplicationSecret.Password)
     }
     if ($connectionMode -eq 'ServicePrincipalWithPath' -and
         -not $Script:M365DSCTelemetryConnectionToGraphParams.ContainsKey('CertificatePassword'))
